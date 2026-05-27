@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+output/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and runtime temp files
+*.log
+*.tmp
+*.temp
+server.err.log
+server.out.log
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

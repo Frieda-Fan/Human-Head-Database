@@ -1,0 +1,2348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>头模尺寸测量系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', Arial, sans-serif; overflow: hidden; background: #1a1a2e; }
+        #container { width: 100vw; height: 100vh; }
+        
+        #info {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(0, 0, 0, 0.9); color: white;
+            padding: 18px; border-radius: 10px; font-size: 13px;
+            z-index: 100; max-width: 320px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            max-height: 90vh; overflow-y: auto;
+        }
+        #info h3 { margin-bottom: 12px; border-bottom: 1px solid #555; padding-bottom: 8px; font-size: 15px; }
+        .measurement { margin: 8px 0; display: flex; justify-content: space-between; align-items: center; }
+        .color-box { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border-radius: 2px; }
+        .small-text { font-size: 10px; color: #aaa; margin-left: 18px; margin-top: -3px; margin-bottom: 6px; }
+        
+        #controls {
+            position: absolute; bottom: 20px; left: 20px;
+            background: rgba(0, 0, 0, 0.9); color: white;
+            padding: 12px 16px; border-radius: 10px; font-size: 11px;
+            z-index: 100; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+        #loading {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: white; font-size: 20px; z-index: 200; text-align: center;
+        }
+        #loading .spinner {
+            border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid white;
+            border-radius: 50%; width: 40px; height: 40px;
+            animation: spin 1s linear infinite; margin: 0 auto 15px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        #fileSelect { 
+            position: absolute; top: 20px; right: 20px; z-index: 150; 
+            background: rgba(0, 0, 0, 0.9); padding: 10px 14px; border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+        select, button {
+            padding: 8px 12px; border: none; border-radius: 5px;
+            background: #4a4a6a; color: white; cursor: pointer; font-size: 13px;
+            transition: background 0.3s;
+        }
+        button:hover { background: #6a6a8a; }
+        button.active { background: #2ecc71; }
+        select { margin-right: 8px; }
+        
+        #markingPanel {
+            position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.95); color: white;
+            padding: 12px 20px; border-radius: 10px; font-size: 12px;
+            z-index: 100; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+            max-width: 70vw;
+            opacity: 0.5;
+            pointer-events: auto;
+            transition: opacity 0.3s;
+        }
+        .mark-btn {
+            padding: 6px 12px; 
+            border-radius: 5px; 
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+        .mark-btn:hover { transform: scale(1.05); }
+        .mark-btn.active { box-shadow: 0 0 12px currentColor; }
+        
+        .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        
+        #status {
+            position: absolute; bottom: 20px; right: 20px;
+            background: rgba(0, 0, 0, 0.85); color: white;
+            padding: 10px 16px; border-radius: 8px; font-size: 11px;
+            z-index: 100;
+        }
+        
+        .section-title {
+            font-size: 12px; color: #888; margin: 10px 0 6px 0;
+            padding-top: 8px; border-top: 1px solid #444;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="loading"><div class="spinner"></div><div>加载中...</div></div>
+    
+    <div id="fileSelect">
+        <select id="modelSelect">
+            <option value="">加载中...</option>
+        </select>
+        <button onclick="loadModel()">加载模型</button>
+        <input type="number" id="scaleFactor" value="1.0" step="0.1" style="width:80px;padding:8px;border-radius:5px;border:none;background:#4a4a6a;color:white;margin-left:8px;" onchange="updateMeasurements()">
+        <label style="color:white;margin-left:4px;font-size:12px;">单位系数</label>
+        <button id="editToggle" style="margin-left:8px;padding:8px 16px;border-radius:5px;border:none;background:#e74c3c;color:white;font-weight:bold;">
+            🔒 锁定标记
+        </button>
+    </div>
+    
+    <div id="markingPanel">
+        <button class="mark-btn" style="background:#2ecc71;color:white;" id="btnHeadTop" onclick="setMarkMode('headTop')">
+            <span class="dot" style="background:#2ecc71;"></span>头顶
+        </button>
+        <button class="mark-btn" style="background:#f39c12;color:white;" id="btnLeftEar" onclick="setMarkMode('leftEar')">
+            <span class="dot" style="background:#f39c12;"></span>左耳屏
+        </button>
+        <button class="mark-btn" style="background:#e74c3c;color:white;" id="btnRightEar" onclick="setMarkMode('rightEar')">
+            <span class="dot" style="background:#e74c3c;"></span>右耳屏
+        </button>
+        <button class="mark-btn" style="background:#9b59b6;color:white;" id="btnEyebrowCenter" onclick="setMarkMode('eyebrowCenter')">
+            <span class="dot" style="background:#9b59b6;"></span>眉心
+        </button>
+        <button class="mark-btn" style="background:#3498db;color:white;" id="btnOccipital" onclick="setMarkMode('occipital')">
+            <span class="dot" style="background:#3498db;"></span>枕后点
+        </button>
+        <button class="mark-btn" style="background:#00cec9;color:white;" id="btnLeftEye" onclick="setMarkMode('leftEye')">
+            <span class="dot" style="background:#00cec9;"></span>左瞳孔
+        </button>
+        <button class="mark-btn" style="background:#fd79a8;color:white;" id="btnRightEye" onclick="setMarkMode('rightEye')">
+            <span class="dot" style="background:#fd79a8;"></span>右瞳孔
+        </button>
+        <button class="mark-btn" style="background:#6c5ce7;color:white;" id="btnHairline" onclick="setMarkMode('hairline')">
+            <span class="dot" style="background:#6c5ce7;"></span>发缘点
+        </button>
+        <button class="mark-btn" style="background:#00b894;color:white;" id="btnNoseRoot" onclick="setMarkMode('noseRoot')">
+            <span class="dot" style="background:#00b894;"></span>鼻根
+        </button>
+        <button class="mark-btn" style="background:#d63031;color:white;" id="btnNoseTip" onclick="setMarkMode('noseTip')">
+            <span class="dot" style="background:#d63031;"></span>鼻尖
+        </button>
+        <button class="mark-btn" style="background:#fdcb6e;color:#333;" id="btnChin" onclick="setMarkMode('chin')">
+            <span class="dot" style="background:#fdcb6e;"></span>颏下点
+        </button>
+        <button class="mark-btn" style="background:#3498db;color:white;" onclick="autoDetectPoints()">
+            🔍 自动检测
+        </button>
+        <button class="mark-btn" style="background:#7f8c8d;color:white;" onclick="resetMarks()">
+            🗑️ 重置
+        </button>
+    </div>
+    
+    <div id="info">
+        <h3>📐 头模尺寸测量</h3>
+        
+        <div class="section-title">主要尺寸</div>
+        <div class="measurement"><span><span class="color-box" style="background:#e74c3c;"></span>头围</span><span id="circumferenceValue">--</span></div>
+        <div class="small-text">眉心到枕后点截面凸包周长</div>
+        
+        <div class="measurement"><span><span class="color-box" style="background:#f39c12;"></span>头宽</span><span id="widthValue">--</span></div>
+        <div class="small-text">左右耳屏左右轴距离</div>
+        
+        <div class="measurement"><span><span class="color-box" style="background:#3498db;"></span>头长</span><span id="lengthValue">--</span></div>
+        <div class="small-text">鼻尖到枕后点前后轴距离</div>
+        
+        <div class="measurement"><span><span class="color-box" style="background:#2ecc71;"></span>头高</span><span id="heightValue">--</span></div>
+        <div class="small-text">头顶点到颏下点 Y 轴距离</div>
+        
+        <div class="measurement"><span><span class="color-box" style="background:#9b59b6;"></span>头耳高</span><span id="earHeightValue">--</span></div>
+        <div class="small-text">头顶点到双耳屏上下轴距离</div>
+        
+        <div class="section-title">面部特征</div>
+        <div class="measurement"><span><span class="color-box" style="background:#00cec9;"></span>瞳距</span><span id="pupilDistanceValue">--</span></div>
+        <div class="small-text">左右瞳孔中心估算点三维距离</div>
+        
+        <div class="measurement"><span><span class="color-box" style="background:#00b894;"></span>耳鼻距</span><span id="earNoseDistanceValue">--</span></div>
+        <div class="small-text">鼻根到耳屏前后轴距离</div>
+        
+        <div class="section-title">弧长测量</div>
+        <div class="measurement"><span><span class="color-box" style="background:#00ff88;"></span>头横维</span><span id="transverseArcValue">--</span></div>
+        <div class="small-text">左耳屏 - 头顶 - 右耳屏弧长</div>
+        
+        <div class="measurement"><span><span class="color-box" style="background:#ff00ff;"></span>头纵维</span><span id="longitudinalArcValue">--</span></div>
+        <div class="small-text">眉心 - 头顶 - 枕后点弧长</div>
+        
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid #444;">
+            <div style="font-size:10px;color:#888;">
+                <span style="color:#ff4444;">X</span>前 | 
+                <span style="color:#44ff44;">Y</span>上 | 
+                <span style="color:#4444ff;">Z</span>右
+            </div>
+        </div>
+    </div>
+    
+    <div id="controls">
+        <h4>🎮 操作说明</h4>
+        <p>左键拖动 - 旋转视角</p>
+        <p>右键拖动 - 平移视角</p>
+        <p>滚轮 - 缩放</p>
+    </div>
+    
+    <div id="status">选择标记模式后点击模型表面标记</div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.150.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.150.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.150.0/build/three.module.js';
+        import { OrbitControls } from 'https://unpkg.com/three@0.150.0/examples/jsm/controls/OrbitControls.js';
+        import { OBJLoader } from 'https://unpkg.com/three@0.150.0/examples/jsm/loaders/OBJLoader.js';
+
+        let scene, camera, renderer, controls;
+        let mesh, measurementGroup, raycaster, mouse;
+        let currentMarkMode = null;
+        let box, center, size;
+        let editMode = false;  // 编辑模式开关
+        let measurementAxes = { lr: 'x', up: 'y', fb: 'z', frontSign: -1 };
+        const MARK_STORAGE_VERSION = 'semantic-face-v1';
+        const MARK_STORAGE_KEY = `headModelManualSettings:${MARK_STORAGE_VERSION}`;
+        const LEGACY_MARK_STORAGE_KEYS = ['headModelMarkedPoints'];
+
+        function cleanupOldMarkedPointStorage() {
+            LEGACY_MARK_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('headModelMarkedPoints:') || (key.startsWith('headModelManualSettings:') && key !== MARK_STORAGE_KEY)) {
+                    localStorage.removeItem(key);
+                }
+            });
+        }
+
+        function axisValue(point, semanticAxis) {
+            const axis = measurementAxes[semanticAxis];
+            const value = point[axis];
+            return semanticAxis === 'fb' ? value * measurementAxes.frontSign : value;
+        }
+
+        function axisVector(semanticAxis) {
+            const axis = measurementAxes[semanticAxis];
+            const sign = semanticAxis === 'fb' ? measurementAxes.frontSign : 1;
+            return new THREE.Vector3(
+                axis === 'x' ? sign : 0,
+                axis === 'y' ? sign : 0,
+                axis === 'z' ? sign : 0
+            );
+        }
+        
+        const pointColors = {
+            headTop: 0x2ecc71,
+            leftEar: 0xf39c12,
+            rightEar: 0xe74c3c,
+            eyebrowCenter: 0x9b59b6,
+            occipital: 0x3498db,
+            leftEye: 0x00cec9,
+            rightEye: 0xfd79a8,
+            hairline: 0x6c5ce7,
+            noseRoot: 0x00b894,
+            noseTip: 0xd63031,
+            chin: 0xfdcb6e
+        };
+        
+        const pointNames = {
+            headTop: '头顶',
+            leftEar: '左耳屏',
+            rightEar: '右耳屏',
+            eyebrowCenter: '眉心',
+            occipital: '枕后点',
+            leftEye: '左瞳孔中心估算点',
+            rightEye: '右瞳孔中心估算点',
+            hairline: '发缘点',
+            noseRoot: '鼻根',
+            noseTip: '鼻尖',
+            chin: '颏下点'
+        };
+        
+        let markedPoints = {};
+        let markSpheres = {};
+        Object.keys(pointNames).forEach(key => {
+            markedPoints[key] = null;
+            markSpheres[key] = null;
+        });
+
+        function init() {
+            cleanupOldMarkedPointStorage();
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a2e);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
+            camera.position.set(300, 200, 300);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            dirLight.position.set(200, 300, 200);
+            scene.add(dirLight);
+
+            measurementGroup = new THREE.Group();
+            scene.add(measurementGroup);
+
+            const axesHelper = new THREE.AxesHelper(80);
+            scene.add(axesHelper);
+            addAxisLabels();
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            renderer.domElement.addEventListener('click', onMouseClick);
+            
+            // 绑定编辑模式切换按钮事件
+            const editToggleBtn = document.getElementById('editToggle');
+            if (editToggleBtn) {
+                editToggleBtn.addEventListener('click', toggleEditMode);
+            }
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            
+            // 动态加载模型列表
+            loadModelList();
+            
+            animate();
+        }
+
+        function addAxisLabels() {
+            function createLabel(text, color) {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 64;
+                canvas.height = 64;
+                ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                ctx.fillRect(0, 0, 64, 64);
+                ctx.fillStyle = color;
+                ctx.font = 'bold 32px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text, 32, 32);
+                
+                const texture = new THREE.CanvasTexture(canvas);
+                const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+                const sprite = new THREE.Sprite(spriteMaterial);
+                sprite.scale.set(25, 25, 1);
+                return sprite;
+            }
+
+            const xLabel = createLabel('X', '#ff4444');
+            xLabel.position.set(90, 0, 0);
+            scene.add(xLabel);
+
+            const yLabel = createLabel('Y', '#44ff44');
+            yLabel.position.set(0, 90, 0);
+            scene.add(yLabel);
+
+            const zLabel = createLabel('Z', '#4444ff');
+            zLabel.position.set(0, 0, 90);
+            scene.add(zLabel);
+        }
+
+        async function loadModelList() {
+            const modelSelect = document.getElementById('modelSelect');
+            
+            // 已知的模型文件列表（根据models文件夹中的实际文件）
+            const knownModels = [
+                '1.obj',
+                'head.obj',
+                'female base.obj',
+                'male base.obj'
+            ];
+            
+            // 清空现有选项
+            modelSelect.innerHTML = '';
+            
+            // 添加已知模型
+            knownModels.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = model;
+                modelSelect.appendChild(option);
+            });
+            
+            // 默认选择第一个模型
+            modelSelect.selectedIndex = 0;
+            // 自动加载第一个模型
+            loadModel();
+        }
+
+        function loadModel() {
+            const fileName = document.getElementById('modelSelect').value;
+            document.getElementById('loading').style.display = 'block';
+
+            if (mesh) scene.remove(mesh);
+            measurementGroup.clear();
+            resetMarks();
+
+            new OBJLoader().load(`../models/${fileName}`, (object) => {
+                mesh = object;
+                mesh.traverse((child) => {
+                    if (child.isMesh) {
+                        child.material = new THREE.MeshPhongMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide, transparent: false, opacity: 1 });
+                        child.geometry.computeVertexNormals();
+                    }
+                });
+                scene.add(mesh);
+
+                box = new THREE.Box3().setFromObject(mesh);
+                size = new THREE.Vector3();
+                box.getSize(size);
+                center = new THREE.Vector3();
+                box.getCenter(center);
+
+                camera.position.set(center.x + size.x * 1.2, center.y + size.y * 0.8, center.z + size.z * 1.2);
+                controls.target.copy(center);
+                controls.update();
+
+                loadMarkedPoints();
+                const hasMarkedPoints = Object.values(markedPoints).some(p => p !== null);
+                if (!hasMarkedPoints) {
+                    autoDetectPoints();
+                }
+                document.getElementById('loading').style.display = 'none';
+            }, (xhr) => {
+                if (xhr.lengthComputable) {
+                    const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
+                    document.getElementById('loading').innerHTML = `<div class="spinner"></div><div>加载中 ${percent}%</div>`;
+                }
+            }, (error) => {
+                document.getElementById('loading').innerHTML = '<div style="color:#ff6666;">加载失败</div>';
+            });
+        }
+
+        function setMarkMode(mode) {
+            if (!editMode) {
+                document.getElementById('status').textContent = '⚠️ 请先开启编辑模式';
+                return;
+            }
+            
+            currentMarkMode = currentMarkMode === mode ? null : mode;
+            
+            document.querySelectorAll('.mark-btn').forEach(btn => btn.classList.remove('active'));
+            
+            if (currentMarkMode) {
+                document.getElementById(`btn${mode.charAt(0).toUpperCase() + mode.slice(1)}`).classList.add('active');
+                document.getElementById('status').textContent = `🎯 标记模式：${pointNames[mode]} - 点击模型表面标记`;
+            } else {
+                document.getElementById('status').textContent = '选择标记模式后点击模型表面标记';
+            }
+        }
+        
+        function toggleEditMode() {
+            editMode = !editMode;
+            const btn = document.getElementById('editToggle');
+            const markingPanel = document.getElementById('markingPanel');
+            
+            if (editMode) {
+                btn.textContent = '🔓 编辑模式';
+                btn.style.background = '#2ecc71';
+                markingPanel.style.opacity = '1';
+                markingPanel.style.pointerEvents = 'auto';
+                document.getElementById('status').textContent = '✏️ 编辑模式已开启 - 选择标记点后点击模型表面';
+            } else {
+                btn.textContent = '🔒 锁定标记';
+                btn.style.background = '#e74c3c';
+                markingPanel.style.opacity = '0.5';
+                markingPanel.style.pointerEvents = 'auto';
+                currentMarkMode = null;
+                document.querySelectorAll('.mark-btn').forEach(btn => btn.classList.remove('active'));
+                document.getElementById('status').textContent = '🔒 标记已锁定';
+                saveMarkedPoints();
+            }
+        }
+        
+        function saveMarkedPoints() {
+            cleanupOldMarkedPointStorage();
+        }
+        
+        function loadMarkedPoints() {
+            cleanupOldMarkedPointStorage();
+            return;
+            const fileName = document.getElementById('modelSelect').value;
+            const stored = null;
+            
+            if (stored) {
+                try {
+                    const data = JSON.parse(stored);
+                    if (data.model === fileName && data.version === MARK_STORAGE_VERSION) {
+                        Object.keys(data.points).forEach(key => {
+                            if (data.points[key] && markedPoints[key] === null) {
+                                const p = new THREE.Vector3(
+                                    data.points[key].x,
+                                    data.points[key].y,
+                                    data.points[key].z
+                                );
+                                placeMarker(key, p);
+                            }
+                        });
+                        updateMeasurements();
+                        document.getElementById('status').textContent = '📥 已加载保存的标记点';
+                    } else if (data.model === fileName) {
+                        localStorage.removeItem(MARK_STORAGE_KEY);
+                    }
+                } catch (e) {
+                    console.error('加载标记点失败:', e);
+                    localStorage.removeItem(MARK_STORAGE_KEY);
+                }
+            }
+        }
+
+        function onMouseClick(event) {
+            if (!currentMarkMode || !mesh) return;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            
+            let intersects = [];
+            mesh.traverse((child) => {
+                if (child.isMesh) {
+                    const childIntersects = raycaster.intersectObject(child);
+                    intersects = intersects.concat(childIntersects);
+                }
+            });
+
+            if (intersects.length > 0) {
+                const point = intersects[0].point.clone();
+                placeMarker(currentMarkMode, point);
+                updateMeasurements();
+            }
+        }
+
+        function placeMarker(mode, point) {
+            if (markSpheres[mode]) {
+                measurementGroup.remove(markSpheres[mode]);
+            }
+
+            markedPoints[mode] = point.clone();
+            
+            const sphere = createSphere(point, pointColors[mode], size);
+            markSpheres[mode] = sphere;
+            measurementGroup.add(sphere);
+
+            document.getElementById('status').textContent = `✅ ${pointNames[mode]} 已标记`;
+        }
+
+        function createSphere(pos, color, size) {
+            const geo = new THREE.SphereGeometry(Math.min(size.x, size.y, size.z) * 0.015, 16, 16);
+            const mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: color }));
+            mesh.position.copy(pos);
+            mesh.name = 'marker';
+            return mesh;
+        }
+
+        function resetMarks() {
+            Object.keys(markSpheres).forEach(key => {
+                if (markSpheres[key]) {
+                    measurementGroup.remove(markSpheres[key]);
+                    markSpheres[key] = null;
+                }
+                markedPoints[key] = null;
+            });
+            currentMarkMode = null;
+            document.querySelectorAll('.mark-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('status').textContent = '标记已重置';
+            
+            Object.keys(pointNames).forEach(key => {
+                const el = document.getElementById(`${key}Value`);
+                if (el) el.textContent = '--';
+            });
+        }
+
+        function autoDetectPointsLegacy() {
+            if (!mesh || !box || !center) return;
+
+            let vertices = [];
+            mesh.traverse((child) => {
+                if (child.isMesh && child.geometry) {
+                    const positions = child.geometry.attributes.position;
+                    for (let i = 0; i < positions.count; i++) {
+                        const p = new THREE.Vector3();
+                        p.fromBufferAttribute(positions, i);
+                        child.localToWorld(p);
+                        vertices.push(p);
+                    }
+                }
+            });
+
+            if (vertices.length === 0) return;
+
+            // 使用循环代替展开运算符，避免栈溢出
+            let minY = Infinity, maxY = -Infinity;
+            for (let i = 0; i < vertices.length; i++) {
+                const y = vertices[i].y;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+            const heightRange = maxY - minY;
+
+            const headTopCandidates = vertices.filter(v => v.y > minY + heightRange * 0.8);
+            const headTop = headTopCandidates.length > 0
+                ? headTopCandidates.reduce((max, p) => p.y > max.y ? p : max)
+                : vertices.reduce((max, p) => p.y > max.y ? p : max, vertices[0]);
+
+            const earYMin = minY + heightRange * 0.4;
+            const earYMax = minY + heightRange * 0.65;
+            const earZoneVertices = vertices.filter(v => v.y >= earYMin && v.y <= earYMax);
+            const xRange = box.max.x - box.min.x;
+            const earXThreshold = xRange * 0.25;
+
+            let leftEar = null, rightEar = null;
+            if (earZoneVertices.length > 10) {
+                const leftCandidates = earZoneVertices.filter(v => center.x - v.x > earXThreshold);
+                if (leftCandidates.length > 5) {
+                    leftEar = leftCandidates.reduce((max, p) => p.y > max.y ? p : max);
+                }
+
+                const rightCandidates = earZoneVertices.filter(v => v.x - center.x > earXThreshold);
+                if (rightCandidates.length > 5) {
+                    rightEar = rightCandidates.reduce((max, p) => p.y > max.y ? p : max);
+                }
+            }
+
+            if (headTop) placeMarker('headTop', headTop);
+            if (leftEar) placeMarker('leftEar', leftEar);
+            if (rightEar) placeMarker('rightEar', rightEar);
+
+            updateMeasurements();
+            document.getElementById('status').textContent = '🔍 自动检测完成';
+        }
+
+        function autoDetectPoints() {
+            if (!mesh || !box || !center || !size) return;
+
+            const vertices = [];
+            mesh.traverse((child) => {
+                if (child.isMesh && child.geometry) {
+                    const positions = child.geometry.attributes.position;
+                    for (let i = 0; i < positions.count; i++) {
+                        const p = new THREE.Vector3();
+                        p.fromBufferAttribute(positions, i);
+                        child.localToWorld(p);
+                        vertices.push(p);
+                    }
+                }
+            });
+            if (vertices.length === 0) return;
+
+            function detectOrientation(points) {
+                const rawBounds = {
+                    x: { min: Infinity, max: -Infinity },
+                    y: { min: Infinity, max: -Infinity },
+                    z: { min: Infinity, max: -Infinity }
+                };
+                points.forEach((p) => {
+                    ['x', 'y', 'z'].forEach((axis) => {
+                        rawBounds[axis].min = Math.min(rawBounds[axis].min, p[axis]);
+                        rawBounds[axis].max = Math.max(rawBounds[axis].max, p[axis]);
+                    });
+                });
+
+                const dims = {
+                    x: rawBounds.x.max - rawBounds.x.min,
+                    y: rawBounds.y.max - rawBounds.y.min,
+                    z: rawBounds.z.max - rawBounds.z.min
+                };
+                const sortedAxes = ['x', 'y', 'z'].sort((a, b) => dims[b] - dims[a]);
+                const up = sortedAxes[0];
+                const fb = sortedAxes[1];
+                const lr = sortedAxes[2];
+
+                function build(sign) {
+                    const local = points.map((p) => ({
+                        point: p,
+                        lr: p[lr],
+                        up: p[up],
+                        front: p[fb] * sign
+                    }));
+                    const b = {
+                        minL: Infinity, maxL: -Infinity,
+                        minU: Infinity, maxU: -Infinity,
+                        minF: Infinity, maxF: -Infinity
+                    };
+                    local.forEach((p) => {
+                        b.minL = Math.min(b.minL, p.lr);
+                        b.maxL = Math.max(b.maxL, p.lr);
+                        b.minU = Math.min(b.minU, p.up);
+                        b.maxU = Math.max(b.maxU, p.up);
+                        b.minF = Math.min(b.minF, p.front);
+                        b.maxF = Math.max(b.maxF, p.front);
+                    });
+                    const width = b.maxL - b.minL;
+                    const height = b.maxU - b.minU;
+                    const depth = b.maxF - b.minF;
+                    const relL = (p) => (p.lr - b.minL) / width;
+                    const relU = (p) => (p.up - b.minU) / height;
+                    const relF = (p) => (p.front - b.minF) / depth;
+                    const pickLocal = (filter, score) => {
+                        let best = null;
+                        let bestScore = -Infinity;
+                        for (const p of local) {
+                            if (!filter(p)) continue;
+                            const s = score(p);
+                            if (s > bestScore) {
+                                bestScore = s;
+                                best = p;
+                            }
+                        }
+                        return best;
+                    };
+                    const centralFrontAverage = (fromU, toU) => {
+                        const bins = [];
+                        for (let i = 0; i < 24; i++) bins.push({ front: -Infinity, count: 0 });
+                        local.forEach((p) => {
+                            if (Math.abs(relL(p) - 0.5) > 0.10) return;
+                            const u = relU(p);
+                            if (u < fromU || u >= toU) return;
+                            const idx = Math.max(0, Math.min(23, Math.floor(u * 24)));
+                            bins[idx].front = Math.max(bins[idx].front, relF(p));
+                            bins[idx].count += 1;
+                        });
+                        const values = bins.filter((bin) => bin.count > 0).map((bin) => bin.front);
+                        return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+                    };
+                    const sideRoughness = (side) => {
+                        const bins = [];
+                        for (let i = 0; i < 18; i++) {
+                            bins.push({ value: side === 'front' ? -Infinity : Infinity, count: 0 });
+                        }
+                        local.forEach((p) => {
+                            const u = relU(p);
+                            if (u < 0.18 || u > 0.88 || Math.abs(relL(p) - 0.5) > 0.32) return;
+                            const idx = Math.max(0, Math.min(17, Math.floor((u - 0.18) / 0.70 * 18)));
+                            if (side === 'front') {
+                                bins[idx].value = Math.max(bins[idx].value, relF(p));
+                            } else {
+                                bins[idx].value = Math.min(bins[idx].value, relF(p));
+                            }
+                            bins[idx].count += 1;
+                        });
+                        const values = bins
+                            .filter((bin) => bin.count > 0 && Number.isFinite(bin.value))
+                            .map((bin) => bin.value);
+                        if (values.length < 4) return 0;
+                        let slopeChange = 0;
+                        for (let i = 1; i < values.length; i++) {
+                            slopeChange += Math.abs(values[i] - values[i - 1]);
+                        }
+                        let curvature = 0;
+                        for (let i = 1; i < values.length - 1; i++) {
+                            curvature += Math.abs(values[i - 1] - 2 * values[i] + values[i + 1]);
+                        }
+                        const range = Math.max(...values) - Math.min(...values);
+                        return slopeChange + curvature * 1.5 + range * 0.5;
+                    };
+                    const semanticFaceScore = () => {
+                        const lateralBins = 17;
+                        const verticalBins = 22;
+                        const grid = Array.from({ length: verticalBins }, () =>
+                            Array.from({ length: lateralBins }, () => ({ value: -Infinity, count: 0 }))
+                        );
+                        local.forEach((p) => {
+                            const u = relU(p);
+                            if (u < 0.12 || u > 0.92) return;
+                            const li = Math.max(0, Math.min(lateralBins - 1, Math.floor(relL(p) * lateralBins)));
+                            const ui = Math.max(0, Math.min(verticalBins - 1, Math.floor(u * verticalBins)));
+                            grid[ui][li].value = Math.max(grid[ui][li].value, relF(p));
+                            grid[ui][li].count += 1;
+                        });
+                        const valuesIn = (l0, l1, u0, u1) => {
+                            const values = [];
+                            const li0 = Math.max(0, Math.floor(l0 * lateralBins));
+                            const li1 = Math.min(lateralBins - 1, Math.floor(l1 * lateralBins));
+                            const ui0 = Math.max(0, Math.floor(u0 * verticalBins));
+                            const ui1 = Math.min(verticalBins - 1, Math.floor(u1 * verticalBins));
+                            for (let ui = ui0; ui <= ui1; ui++) {
+                                for (let li = li0; li <= li1; li++) {
+                                    const cell = grid[ui][li];
+                                    if (cell.count > 0 && Number.isFinite(cell.value)) values.push(cell.value);
+                                }
+                            }
+                            return values;
+                        };
+                        const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+                        const minValue = (values) => values.length ? Math.min(...values) : 0;
+                        const maxValue = (values) => values.length ? Math.max(...values) : 0;
+                        const clamp01 = (value) => Math.max(0, Math.min(1, value));
+
+                        let nosePeak = { value: -Infinity, li: -1, ui: -1 };
+                        for (let ui = Math.floor(0.42 * verticalBins); ui <= Math.floor(0.66 * verticalBins); ui++) {
+                            for (let li = Math.floor(0.42 * lateralBins); li <= Math.floor(0.58 * lateralBins); li++) {
+                                const cell = grid[ui]?.[li];
+                                if (cell && cell.count > 0 && cell.value > nosePeak.value) {
+                                    nosePeak = { value: cell.value, li, ui };
+                                }
+                            }
+                        }
+                        if (!Number.isFinite(nosePeak.value)) {
+                            return { score: -Infinity, reason: 'no nose candidate' };
+                        }
+
+                        const noseU = (nosePeak.ui + 0.5) / verticalBins;
+                        const noseL = (nosePeak.li + 0.5) / lateralBins;
+                        const sideAround = valuesIn(0.18, 0.38, Math.max(0.35, noseU - 0.08), Math.min(0.72, noseU + 0.08))
+                            .concat(valuesIn(0.62, 0.82, Math.max(0.35, noseU - 0.08), Math.min(0.72, noseU + 0.08)));
+                        const noseProminence = nosePeak.value - average(sideAround);
+
+                        const highNoseColumns = new Set();
+                        for (let ui = Math.max(0, nosePeak.ui - 1); ui <= Math.min(verticalBins - 1, nosePeak.ui + 1); ui++) {
+                            for (let li = 0; li < lateralBins; li++) {
+                                const cell = grid[ui][li];
+                                if (cell.count > 0 && cell.value > nosePeak.value - 0.045) highNoseColumns.add(li);
+                            }
+                        }
+                        const noseWidth = highNoseColumns.size / lateralBins;
+                        const noseNarrowScore = clamp01((0.42 - noseWidth) / 0.32);
+                        const noseHeightScore = clamp01(1 - Math.abs(noseU - 0.50) / 0.18);
+
+                        const eyeU0 = Math.min(0.76, noseU + 0.03);
+                        const eyeU1 = Math.min(0.84, noseU + 0.20);
+                        const leftEye = valuesIn(0.26, 0.44, eyeU0, eyeU1);
+                        const rightEye = valuesIn(0.56, 0.74, eyeU0, eyeU1);
+                        const brow = valuesIn(0.30, 0.70, Math.min(0.86, eyeU1 + 0.02), Math.min(0.92, eyeU1 + 0.14));
+                        const cheek = valuesIn(0.22, 0.78, Math.max(0.30, noseU - 0.07), Math.max(0.35, noseU + 0.03));
+                        const eyeReference = Math.max(average(brow), average(cheek));
+                        const leftEyeDepth = Math.max(0, eyeReference - minValue(leftEye));
+                        const rightEyeDepth = Math.max(0, eyeReference - minValue(rightEye));
+                        const eyeSymmetry = clamp01(1 - Math.abs(average(leftEye) - average(rightEye)) * 8);
+                        const plausibleEyeDepth = clamp01(1 - Math.max(0, Math.max(leftEyeDepth, rightEyeDepth) - 0.34) * 4);
+                        const eyeScore = clamp01((leftEyeDepth + rightEyeDepth) * 3) * eyeSymmetry * plausibleEyeDepth;
+
+                        const lowerFace = valuesIn(0.35, 0.65, Math.max(0.20, noseU - 0.25), Math.max(0.28, noseU - 0.06));
+                        const lowerFaceVariation = maxValue(lowerFace) - minValue(lowerFace);
+                        const earSurface = valuesIn(0.03, 0.22, 0.35, 0.68).concat(valuesIn(0.78, 0.97, 0.35, 0.68));
+                        const earBehindScore = clamp01((nosePeak.value - average(earSurface) - 0.04) * 5);
+                        const broadNosePenalty = clamp01((noseWidth - 0.42) / 0.22);
+                        const smoothBackPenalty = clamp01(0.10 - sideRoughness('front'));
+
+                        const score =
+                            noseProminence * 60 +
+                            noseNarrowScore * 35 +
+                            noseHeightScore * 18 +
+                            eyeScore * 20 +
+                            lowerFaceVariation * 8 +
+                            earBehindScore * 12 -
+                            broadNosePenalty * 28 -
+                            smoothBackPenalty * 8;
+
+                        return {
+                            score,
+                            nosePeak: nosePeak.value,
+                            noseU,
+                            noseL,
+                            noseProminence,
+                            noseWidth,
+                            noseNarrowScore,
+                            noseHeightScore,
+                            leftEyeDepth,
+                            rightEyeDepth,
+                            eyeScore,
+                            lowerFaceVariation,
+                            earBehindScore,
+                            broadNosePenalty
+                        };
+                    };
+
+                    const nose = pickLocal(
+                        (p) => Math.abs(relL(p) - 0.5) < 0.12 && relU(p) > 0.38 && relU(p) < 0.62,
+                        (p) => p.front - Math.abs(relU(p) - 0.55) * depth * 2.0
+                    );
+                    const occipital = pickLocal(
+                        (p) => Math.abs(relL(p) - 0.5) < 0.22 && relU(p) > 0.42 && relU(p) < 0.75,
+                        (p) => -p.front - Math.abs(relU(p) - 0.55) * depth * 0.35
+                    );
+                    const leftEar = pickLocal(
+                        (p) => relL(p) < 0.30 && relU(p) > 0.35 && relU(p) < 0.65,
+                        (p) => -Math.abs(relL(p) - 0.15) * 2 - Math.abs(relF(p) - 0.45)
+                    );
+                    const rightEar = pickLocal(
+                        (p) => relL(p) > 0.70 && relU(p) > 0.35 && relU(p) < 0.65,
+                        (p) => -Math.abs(relL(p) - 0.85) * 2 - Math.abs(relF(p) - 0.45)
+                    );
+                    const earFront = leftEar && rightEar ? (leftEar.front + rightEar.front) / 2 : (b.minF + b.maxF) / 2;
+                    const upperFaceFront = centralFrontAverage(0.58, 0.82);
+                    const midFaceFront = centralFrontAverage(0.42, 0.58);
+                    const lowerNeckFront = centralFrontAverage(0.00, 0.18);
+                    const frontRoughness = sideRoughness('front');
+                    const backRoughness = sideRoughness('back');
+                    const semantic = semanticFaceScore();
+                    const geometricSupport = nose && occipital
+                        ? (nose.front - earFront) +
+                          (earFront - occipital.front) -
+                          Math.abs(relU(nose) - 0.55) * depth * 2 +
+                          (upperFaceFront - lowerNeckFront) * depth * 2 -
+                          Math.max(0, midFaceFront - upperFaceFront) * depth
+                        : 0;
+                    const score = semantic.score + geometricSupport * 0.05;
+                    return { score, semantic, bounds: b, width, height, depth, local, relL, relU, relF, sign, upperFaceFront, midFaceFront, lowerNeckFront, frontRoughness, backRoughness };
+                }
+
+                const positive = build(1);
+                const negative = build(-1);
+                const chosen = positive.score > negative.score ? positive : negative;
+                measurementAxes = { lr, up, fb, frontSign: chosen.sign };
+                window.__headDebug = {
+                    axes: measurementAxes,
+                    positive: {
+                        score: positive.score,
+                        faceScore: positive.semantic,
+                        frontRoughness: positive.frontRoughness,
+                        backRoughness: positive.backRoughness
+                    },
+                    negative: {
+                        score: negative.score,
+                        faceScore: negative.semantic,
+                        frontRoughness: negative.frontRoughness,
+                        backRoughness: negative.backRoughness
+                    },
+                    selectedFaceSide: chosen === positive ? 'candidateA(+front-back-axis)' : 'candidateB(-front-back-axis)'
+                };
+                return chosen;
+            }
+
+            const orientation = detectOrientation(vertices);
+            const localVertices = orientation.local;
+            const width = orientation.width;
+            const height = orientation.height;
+            const depth = orientation.depth;
+            const relX = orientation.relL;
+            const relY = orientation.relU;
+            const relZ = orientation.relF;
+            const bounds = {
+                minX: orientation.bounds.minL, maxX: orientation.bounds.maxL,
+                minY: orientation.bounds.minU, maxY: orientation.bounds.maxU,
+                minZ: orientation.bounds.minF, maxZ: orientation.bounds.maxF
+            };
+            const cx = (bounds.minX + bounds.maxX) / 2;
+            const cy = (bounds.minY + bounds.maxY) / 2;
+            const frontZ = bounds.maxZ;
+            const backZ = bounds.minZ;
+
+            function worldPoint(localPoint) {
+                return localPoint ? localPoint.point.clone() : null;
+            }
+
+            function pickLocalPoint(filter, score) {
+                let best = null;
+                let bestScore = -Infinity;
+                for (const p of localVertices) {
+                    if (!filter(p)) continue;
+                    const s = score(p);
+                    if (s > bestScore) {
+                        bestScore = s;
+                        best = p;
+                    }
+                }
+                return best;
+            }
+
+            function pick(filter, score) {
+                return worldPoint(pickLocalPoint(filter, score));
+            }
+
+            function targetPoint(targetX, targetY, targetZ, filter = () => true) {
+                return pick(filter, (p) => {
+                    const dx = Math.abs(p.lr - targetX) / width;
+                    const dy = Math.abs(p.up - targetY) / height;
+                    const dz = Math.abs(p.front - targetZ) / depth;
+                    return -(dx * 1.2 + dy * 1.4 + dz);
+                });
+            }
+
+            function surfacePoint(targetX, targetY, targetZ, filter = () => true, weights = { x: 1, y: 1, z: 1 }) {
+                return pick(filter, (p) => {
+                    const dx = Math.abs(p.lr - targetX) / width;
+                    const dy = Math.abs(p.up - targetY) / height;
+                    const dz = Math.abs(p.front - targetZ) / depth;
+                    return -(dx * weights.x + dy * weights.y + dz * weights.z);
+                });
+            }
+
+            function clamp(value, min, max) {
+                return Math.max(min, Math.min(max, value));
+            }
+
+            function localToWorld(lr, up, front) {
+                const point = new THREE.Vector3();
+                point[measurementAxes.lr] = lr;
+                point[measurementAxes.up] = up;
+                point[measurementAxes.fb] = front / measurementAxes.frontSign;
+                return point;
+            }
+
+            function makeLocalPoint(lr, up, front) {
+                return { lr, up, front, point: localToWorld(lr, up, front) };
+            }
+
+            function quantile(values, q) {
+                if (!values.length) return 0;
+                const sorted = [...values].sort((a, b) => a - b);
+                const idx = clamp((sorted.length - 1) * q, 0, sorted.length - 1);
+                const lo = Math.floor(idx);
+                const hi = Math.ceil(idx);
+                if (lo === hi) return sorted[lo];
+                return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+            }
+
+            function centroidLocal(points, weightFn = () => 1) {
+                if (!points.length) return null;
+                let lr = 0;
+                let up = 0;
+                let front = 0;
+                let total = 0;
+                const world = new THREE.Vector3();
+                points.forEach((p) => {
+                    const weight = Math.max(0.0001, weightFn(p));
+                    lr += p.lr * weight;
+                    up += p.up * weight;
+                    front += p.front * weight;
+                    world.addScaledVector(p.point, weight);
+                    total += weight;
+                });
+                world.multiplyScalar(1 / total);
+                return { lr: lr / total, up: up / total, front: front / total, point: world };
+            }
+
+            function trimLocalOutliers(points, fields = ['lr', 'up'], lowQ = 0.08, highQ = 0.92) {
+                if (points.length < 8) return points;
+                return points.filter((p) => fields.every((field) => {
+                    const values = points.map((item) => item[field]);
+                    return p[field] >= quantile(values, lowQ) && p[field] <= quantile(values, highQ);
+                }));
+            }
+
+            function displaySideDebug() {
+                const debugNames = ['faceSideDebug', 'backSideDebug'];
+                [...measurementGroup.children].forEach((child) => {
+                    if (debugNames.includes(child.name)) measurementGroup.remove(child);
+                });
+                const addSidePoints = (name, color, filter) => {
+                    const positions = [];
+                    let kept = 0;
+                    for (let i = 0; i < localVertices.length; i++) {
+                        const p = localVertices[i];
+                        if (!filter(p)) continue;
+                        if (kept % 6 === 0) {
+                            positions.push(p.point.x, p.point.y, p.point.z);
+                        }
+                        kept++;
+                    }
+                    if (positions.length === 0) return;
+                    const geo = new THREE.BufferGeometry();
+                    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                    const material = new THREE.PointsMaterial({
+                        color,
+                        size: Math.max(2, Math.min(size.x, size.y, size.z) * 0.01),
+                        transparent: true,
+                        opacity: 0.75
+                    });
+                    const points = new THREE.Points(geo, material);
+                    points.name = name;
+                    measurementGroup.add(points);
+                };
+                addSidePoints('faceSideDebug', 0x00ffcc, (p) => relZ(p) > 0.82 && relY(p) > 0.16 && relY(p) < 0.92);
+                addSidePoints('backSideDebug', 0xff66ff, (p) => relZ(p) < 0.18 && relY(p) > 0.16 && relY(p) < 0.92);
+            }
+
+            displaySideDebug();
+
+            let headTopLocal = pickLocalPoint(
+                (p) => Math.abs(p.lr - cx) < width * 0.28 && relZ(p) > 0.18,
+                (p) => p.up - Math.abs(p.lr - cx) * 0.25
+            );
+            let chinLocal = pickLocalPoint(
+                (p) => Math.abs(p.lr - cx) < width * 0.18 && relY(p) > 0.16 && relY(p) < 0.38 && relZ(p) < 0.32,
+                (p) => -p.up - Math.abs(p.lr - cx) * 0.45 - Math.abs(relZ(p) - 0.18) * height * 0.35
+            );
+            if (!headTopLocal) headTopLocal = makeLocalPoint(cx, bounds.maxY, backZ + depth * 0.45);
+            if (!chinLocal) chinLocal = makeLocalPoint(cx, bounds.minY, backZ + depth * 0.40);
+            const headTop = worldPoint(headTopLocal);
+            const chin = worldPoint(chinLocal);
+            const occipital = pick(
+                (p) => Math.abs(p.lr - cx) < width * 0.22 && relY(p) > 0.42 && relY(p) < 0.72 && relZ(p) < 0.28,
+                (p) => -p.front - Math.abs(p.lr - cx) * 0.45 - Math.abs(relY(p) - 0.55) * depth * 0.28
+            );
+            const noseTipLocal = pickLocalPoint(
+                (p) => Math.abs(p.lr - cx) < width * 0.12 && relY(p) > 0.40 && relY(p) < 0.53 && relZ(p) > 0.65,
+                (p) => p.front - Math.abs(p.lr - cx) * 0.55 - Math.abs(relY(p) - 0.48) * depth * 0.25
+            );
+            const noseTip = worldPoint(noseTipLocal);
+
+            const faceMidlineX = noseTipLocal
+                ? clamp(noseTipLocal.lr, cx - width * 0.035, cx + width * 0.035)
+                : cx;
+            const verticalSign = headTopLocal.up >= chinLocal.up ? 1 : -1;
+            const orientedUp = (p) => verticalSign * p.up;
+            const rawUp = (value) => value / verticalSign;
+            const headTopY = Math.max(orientedUp(headTopLocal), orientedUp(chinLocal));
+            const chinY = Math.min(orientedUp(headTopLocal), orientedUp(chinLocal));
+            const semanticHeadHeight = Math.max(headTopY - chinY, height * 0.55);
+            const headWidth = width;
+            const faceHeight = semanticHeadHeight;
+            const detectionScaleFactor = parseFloat(document.getElementById('scaleFactor').value) || 1;
+            const pupilDistanceMinModel = 50 / detectionScaleFactor;
+            const pupilDistanceMaxModel = 70 / detectionScaleFactor;
+            const pupilDistanceTargetModel = 60 / detectionScaleFactor;
+            const eyeBandMinY = headTopY - 0.55 * semanticHeadHeight;
+            const eyeBandMaxY = headTopY - 0.40 * semanticHeadHeight;
+            const eyeBandY = {
+                min: rawUp(eyeBandMinY),
+                max: rawUp(eyeBandMaxY),
+                orientedMin: eyeBandMinY,
+                orientedMax: eyeBandMaxY
+            };
+
+            function snapToFaceSurface(lr, orientedY, options = {}) {
+                const xHalf = options.xHalf ?? headWidth * 0.035;
+                const yHalf = options.yHalf ?? semanticHeadHeight * 0.035;
+                const minRelZ = options.minRelZ ?? 0.50;
+                const targetRawY = rawUp(orientedY);
+                const candidates = localVertices.filter((p) =>
+                    Math.abs(p.lr - lr) <= xHalf &&
+                    Math.abs(orientedUp(p) - orientedY) <= yHalf &&
+                    relZ(p) >= minRelZ
+                );
+                const best = candidates.length
+                    ? candidates.reduce((winner, p) => {
+                        const winnerScore = winner.front - Math.abs(winner.lr - lr) * 0.08 - Math.abs(orientedUp(winner) - orientedY) * 0.12;
+                        const score = p.front - Math.abs(p.lr - lr) * 0.08 - Math.abs(orientedUp(p) - orientedY) * 0.12;
+                        return score > winnerScore ? p : winner;
+                    }, candidates[0])
+                    : pickLocalPoint(
+                        (p) => relZ(p) >= minRelZ * 0.85,
+                        (p) => {
+                            const dx = Math.abs(p.lr - lr) / headWidth;
+                            const dy = Math.abs(orientedUp(p) - orientedY) / semanticHeadHeight;
+                            return p.front - dx * depth * 1.3 - dy * depth * 1.8;
+                        }
+                    );
+                const front = best ? best.front : backZ + depth * 0.72;
+                return makeLocalPoint(lr, targetRawY, front);
+            }
+
+            function componentBounds(points) {
+                const b = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minF: Infinity, maxF: -Infinity };
+                points.forEach((p) => {
+                    const y = orientedUp(p);
+                    b.minX = Math.min(b.minX, p.lr);
+                    b.maxX = Math.max(b.maxX, p.lr);
+                    b.minY = Math.min(b.minY, y);
+                    b.maxY = Math.max(b.maxY, y);
+                    b.minF = Math.min(b.minF, p.front);
+                    b.maxF = Math.max(b.maxF, p.front);
+                });
+                return b;
+            }
+
+            function clusterEyeDepressions(points) {
+                if (!points.length) return [];
+                const cellX = Math.max(headWidth * 0.018, 0.0001);
+                const cellY = Math.max(semanticHeadHeight * 0.018, 0.0001);
+                const cellMap = new Map();
+                points.forEach((p) => {
+                    const ix = Math.floor(p.lr / cellX);
+                    const iy = Math.floor(orientedUp(p) / cellY);
+                    const key = `${ix},${iy}`;
+                    if (!cellMap.has(key)) cellMap.set(key, []);
+                    cellMap.get(key).push(p);
+                });
+
+                const visited = new Set();
+                const clusters = [];
+                for (const key of cellMap.keys()) {
+                    if (visited.has(key)) continue;
+                    const queue = [key];
+                    const cluster = [];
+                    visited.add(key);
+                    while (queue.length) {
+                        const current = queue.shift();
+                        const cellPoints = cellMap.get(current) || [];
+                        cluster.push(...cellPoints);
+                        const [ix, iy] = current.split(',').map(Number);
+                        for (let dx = -1; dx <= 1; dx++) {
+                            for (let dy = -1; dy <= 1; dy++) {
+                                if (dx === 0 && dy === 0) continue;
+                                const next = `${ix + dx},${iy + dy}`;
+                                if (!visited.has(next) && cellMap.has(next)) {
+                                    visited.add(next);
+                                    queue.push(next);
+                                }
+                            }
+                        }
+                    }
+                    clusters.push(cluster);
+                }
+                return clusters;
+            }
+
+            function findLowerEyeDepression(side, targetX, anchorY) {
+                const sideSign = side === 'left' ? -1 : 1;
+                const lowerY = clamp(
+                    Math.min(anchorY - semanticHeadHeight * 0.035, headTopY - 0.52 * semanticHeadHeight),
+                    headTopY - 0.60 * semanticHeadHeight,
+                    headTopY - 0.48 * semanticHeadHeight
+                );
+                const yMin = Math.max(eyeBandMinY - semanticHeadHeight * 0.04, lowerY - semanticHeadHeight * 0.045);
+                const yMax = Math.min(eyeBandMaxY, lowerY + semanticHeadHeight * 0.035);
+                const xMin = faceMidlineX + sideSign * headWidth * 0.10;
+                const xMax = faceMidlineX + sideSign * headWidth * 0.34;
+                const minX = Math.min(xMin, xMax);
+                const maxX = Math.max(xMin, xMax);
+                const region = localVertices.filter((p) => {
+                    const y = orientedUp(p);
+                    return p.lr >= minX &&
+                        p.lr <= maxX &&
+                        Math.abs(p.lr - targetX) <= headWidth * 0.095 &&
+                        y >= yMin &&
+                        y <= yMax &&
+                        relZ(p) > 0.48 &&
+                        relZ(p) < 0.96;
+                });
+                if (region.length < 6) return null;
+
+                const fronts = region.map((p) => p.front);
+                const surfaceFront = quantile(fronts, 0.82);
+                const depressionCutoff = quantile(fronts, 0.28);
+                const socket = region.filter((p) => p.front <= depressionCutoff);
+                if (socket.length < 4) return null;
+
+                const clusters = clusterEyeDepressions(socket)
+                    .map((points) => {
+                        const b = componentBounds(points);
+                        const boxW = b.maxX - b.minX;
+                        const boxH = b.maxY - b.minY;
+                        const centerX = (b.minX + b.maxX) / 2;
+                        const centerY = (b.minY + b.maxY) / 2;
+                        const avgFront = points.reduce((sum, p) => sum + p.front, 0) / points.length;
+                        const depression = surfaceFront - avgFront;
+                        const area = boxW * boxH;
+                        const plausible = points.length >= 3 &&
+                            boxW <= headWidth * 0.13 &&
+                            boxH <= semanticHeadHeight * 0.075 &&
+                            area <= headWidth * semanticHeadHeight * 0.010 &&
+                            centerY >= yMin &&
+                            centerY <= yMax;
+                        const score = depression * 22 -
+                            Math.abs(centerX - targetX) / headWidth * 10 -
+                            Math.abs(centerY - lowerY) / semanticHeadHeight * 8 -
+                            area / (headWidth * semanticHeadHeight * 0.010);
+                        return { points, b, centerX, centerY, avgFront, depression, plausible, score };
+                    })
+                    .filter((cluster) => cluster.plausible)
+                    .sort((a, b) => b.score - a.score);
+
+                const best = clusters[0];
+                if (!best) return null;
+                const core = trimLocalOutliers(best.points, ['lr', 'up'], 0.10, 0.90);
+                const centroid = centroidLocal(core.length ? core : best.points, (p) =>
+                    1 + Math.max(0, surfaceFront - p.front) / Math.max(depth * 0.03, 0.0001)
+                );
+                if (!centroid) return null;
+                return makeLocalPoint(
+                    clamp(centroid.lr, minX, maxX),
+                    rawUp(clamp(orientedUp(centroid), yMin, yMax)),
+                    centroid.front
+                );
+            }
+
+            function fallbackEye(side, targetDistanceModel = pupilDistanceTargetModel, anchorY = headTopY - 0.48 * semanticHeadHeight) {
+                const sideSign = side === 'left' ? -1 : 1;
+                const offset = clamp(targetDistanceModel / 2, headWidth * 0.10, headWidth * 0.34);
+                const targetX = faceMidlineX + sideSign * offset;
+                const lowerDepression = findLowerEyeDepression(side, targetX, anchorY);
+                if (lowerDepression) return lowerDepression;
+                return snapToFaceSurface(
+                    targetX,
+                    clamp(anchorY - semanticHeadHeight * 0.055, headTopY - 0.60 * semanticHeadHeight, headTopY - 0.50 * semanticHeadHeight),
+                    { xHalf: headWidth * 0.045, yHalf: semanticHeadHeight * 0.04, minRelZ: 0.56 }
+                );
+            }
+
+            function fallbackEyePair(reason, baseLeft = null, baseRight = null) {
+                const anchorY = baseLeft && baseRight
+                    ? Math.min(orientedUp(baseLeft), orientedUp(baseRight))
+                    : headTopY - 0.52 * semanticHeadHeight;
+                let left = fallbackEye('left', pupilDistanceTargetModel, anchorY);
+                let right = fallbackEye('right', pupilDistanceTargetModel, anchorY);
+                const distance = left.point.distanceTo(right.point);
+                if (distance < pupilDistanceMinModel || distance > pupilDistanceMaxModel) {
+                    const averageFront = (left.front + right.front) / 2;
+                    left = makeLocalPoint(faceMidlineX - pupilDistanceTargetModel / 2, left.up, averageFront);
+                    right = makeLocalPoint(faceMidlineX + pupilDistanceTargetModel / 2, right.up, averageFront);
+                }
+                return { left, right, reason };
+            }
+
+            function detectEyeSocketCenter(side) {
+                const sideSign = side === 'left' ? -1 : 1;
+                const x0 = faceMidlineX + sideSign * headWidth * 0.10;
+                const x1 = faceMidlineX + sideSign * headWidth * 0.34;
+                const xMin = Math.min(x0, x1);
+                const xMax = Math.max(x0, x1);
+                const targetX = faceMidlineX + sideSign * headWidth * 0.18;
+                const targetY = headTopY - 0.48 * semanticHeadHeight;
+                const region = localVertices.filter((p) => {
+                    const y = orientedUp(p);
+                    return p.lr >= xMin &&
+                        p.lr <= xMax &&
+                        y >= eyeBandMinY &&
+                        y <= eyeBandMaxY &&
+                        relZ(p) > 0.54 &&
+                        relZ(p) < 0.98;
+                });
+                if (region.length < 10) {
+                    return { point: fallbackEye(side), fallback: true, reason: 'empty eye window' };
+                }
+
+                const fronts = region.map((p) => p.front);
+                const frontReference = quantile(fronts, 0.82);
+                const depressionCutoff = quantile(fronts, 0.24);
+                const depressionPoints = region.filter((p) =>
+                    p.front <= depressionCutoff &&
+                    Math.abs(p.lr - targetX) <= headWidth * 0.15
+                );
+                if (depressionPoints.length < 5) {
+                    return { point: fallbackEye(side), fallback: true, reason: 'weak eye depression' };
+                }
+
+                const clusters = clusterEyeDepressions(depressionPoints)
+                    .map((points) => {
+                        const b = componentBounds(points);
+                        const boxW = b.maxX - b.minX;
+                        const boxH = b.maxY - b.minY;
+                        const area = boxW * boxH;
+                        const centerX = (b.minX + b.maxX) / 2;
+                        const centerY = (b.minY + b.maxY) / 2;
+                        const aspect = boxH > 0 ? boxW / boxH : 99;
+                        const avgFront = points.reduce((sum, p) => sum + p.front, 0) / points.length;
+                        const depression = frontReference - avgFront;
+                        const tooLarge = area > headWidth * semanticHeadHeight * 0.018 ||
+                            boxW > headWidth * 0.17 ||
+                            boxH > semanticHeadHeight * 0.10 ||
+                            points.length > region.length * 0.45;
+                        const plausible = points.length >= 3 &&
+                            !tooLarge &&
+                            aspect >= 0.75 &&
+                            aspect <= 5.8 &&
+                            centerY >= eyeBandMinY &&
+                            centerY <= eyeBandMaxY &&
+                            Math.abs(centerX - faceMidlineX) >= headWidth * 0.10 &&
+                            Math.abs(centerX - faceMidlineX) <= headWidth * 0.34;
+                        const score = depression * 18 -
+                            Math.abs(centerX - targetX) / headWidth * 8 -
+                            Math.abs(centerY - targetY) / semanticHeadHeight * 12 -
+                            Math.max(0, area / (headWidth * semanticHeadHeight * 0.018)) * 2;
+                        return { points, bounds: b, centerX, centerY, boxW, boxH, area, aspect, depression, plausible, score };
+                    })
+                    .filter((cluster) => cluster.plausible)
+                    .sort((a, b) => b.score - a.score);
+
+                const bestCluster = clusters[0];
+                if (!bestCluster) {
+                    return { point: fallbackEye(side), fallback: true, reason: 'no plausible small eye cluster' };
+                }
+
+                const centerX = clamp(bestCluster.centerX, xMin + headWidth * 0.01, xMax - headWidth * 0.01);
+                const centerY = clamp(bestCluster.centerY, eyeBandMinY, eyeBandMaxY);
+                const front = quantile(bestCluster.points.map((p) => p.front), 0.35);
+                const point = makeLocalPoint(centerX, rawUp(centerY), front);
+                return { point, fallback: false, reason: 'small eye cluster', cluster: bestCluster };
+            }
+
+            const leftEyeResult = detectEyeSocketCenter('left');
+            const rightEyeResult = detectEyeSocketCenter('right');
+            let leftEyeLocal = leftEyeResult.point;
+            let rightEyeLocal = rightEyeResult.point;
+            let eyeFallbackUsed = leftEyeResult.fallback || rightEyeResult.fallback;
+            if (Math.abs(orientedUp(leftEyeLocal) - orientedUp(rightEyeLocal)) > semanticHeadHeight * 0.04) {
+                const fallback = fallbackEyePair('eye height mismatch', leftEyeLocal, rightEyeLocal);
+                leftEyeLocal = fallback.left;
+                rightEyeLocal = fallback.right;
+                eyeFallbackUsed = true;
+            }
+            const detectedPupilDistance = leftEyeLocal.point.distanceTo(rightEyeLocal.point);
+            if (detectedPupilDistance < pupilDistanceMinModel || detectedPupilDistance > pupilDistanceMaxModel) {
+                const fallback = fallbackEyePair('pupil distance outside 50-70mm', leftEyeLocal, rightEyeLocal);
+                leftEyeLocal = fallback.left;
+                rightEyeLocal = fallback.right;
+                eyeFallbackUsed = true;
+            }
+            const finalPupilDistanceModel = leftEyeLocal.point.distanceTo(rightEyeLocal.point);
+            const finalPupilDistanceMm = finalPupilDistanceModel * detectionScaleFactor;
+            const leftEye = leftEyeLocal?.point || null;
+            const rightEye = rightEyeLocal?.point || null;
+
+            const eyeMidLocal = centroidLocal([leftEyeLocal, rightEyeLocal]);
+            const eyeCenterY = orientedUp(eyeMidLocal);
+            const eyeCenterFront = eyeMidLocal.front;
+            const nasionTargetY = eyeCenterY + semanticHeadHeight * 0.05;
+            const nasionSearchMinY = eyeCenterY + semanticHeadHeight * 0.03;
+            const nasionSearchMaxY = eyeCenterY + semanticHeadHeight * 0.075;
+            const nasionTargetFront = clamp(eyeCenterFront + depth * 0.07, backZ + depth * 0.54, frontZ - depth * 0.04);
+            const noseBridgeLine = {
+                x: faceMidlineX,
+                yMin: nasionSearchMinY,
+                yMax: nasionSearchMaxY,
+                targetFront: nasionTargetFront
+            };
+            const nasionCandidate = pickLocalPoint(
+                (p) =>
+                    Math.abs(p.lr - faceMidlineX) < headWidth * 0.045 &&
+                    orientedUp(p) >= nasionSearchMinY &&
+                    orientedUp(p) <= nasionSearchMaxY &&
+                    relZ(p) > 0.48 &&
+                    relZ(p) < 0.94,
+                (p) => {
+                    const dx = Math.abs(p.lr - faceMidlineX) / headWidth;
+                    const dy = Math.abs(orientedUp(p) - nasionTargetY) / semanticHeadHeight;
+                    const dz = Math.abs(p.front - nasionTargetFront) / depth;
+                    const noseTipPenalty = noseTipLocal
+                        ? Math.max(0, p.front - (noseTipLocal.front - depth * 0.09)) / depth
+                        : 0;
+                    return -(dx * 8 + dy * 7 + dz * 1.1 + noseTipPenalty * 5);
+                }
+            );
+            const nasionLocal = nasionCandidate
+                ? makeLocalPoint(
+                    faceMidlineX,
+                    rawUp(clamp(orientedUp(nasionCandidate), nasionSearchMinY, nasionSearchMaxY)),
+                    nasionCandidate.front
+                )
+                : snapToFaceSurface(faceMidlineX, nasionTargetY, { xHalf: headWidth * 0.035, yHalf: semanticHeadHeight * 0.025, minRelZ: 0.50 });
+            const noseRoot = nasionLocal.point;
+
+            const nasionY = orientedUp(nasionLocal);
+            const browMinY = nasionY + semanticHeadHeight * 0.035;
+            const browMaxY = nasionY + semanticHeadHeight * 0.085;
+            const browTargetY = nasionY + semanticHeadHeight * 0.055;
+            const browCandidate = pickLocalPoint(
+                (p) =>
+                    Math.abs(p.lr - faceMidlineX) < headWidth * 0.06 &&
+                    orientedUp(p) >= browMinY &&
+                    orientedUp(p) <= browMaxY &&
+                    relZ(p) > 0.36,
+                (p) => {
+                    const dx = Math.abs(p.lr - faceMidlineX) / headWidth;
+                    const dy = Math.abs(orientedUp(p) - browTargetY) / semanticHeadHeight;
+                    const dz = Math.abs(p.front - (nasionLocal.front - depth * 0.035)) / depth;
+                    return -(dx * 7 + dy * 8 + dz * 0.65);
+                }
+            );
+            let browLocal = browCandidate
+                ? makeLocalPoint(
+                    faceMidlineX,
+                    rawUp(clamp(orientedUp(browCandidate), browMinY, browMaxY)),
+                    browCandidate.front
+                )
+                : snapToFaceSurface(faceMidlineX, browTargetY, { xHalf: headWidth * 0.05, yHalf: semanticHeadHeight * 0.025, minRelZ: 0.40 });
+            if (orientedUp(browLocal) <= nasionY + semanticHeadHeight * 0.03) {
+                browLocal = snapToFaceSurface(faceMidlineX, browTargetY, { xHalf: headWidth * 0.05, yHalf: semanticHeadHeight * 0.025, minRelZ: 0.40 });
+            }
+            const eyebrowCenter = browLocal.point;
+            const hairline = surfacePoint(
+                cx,
+                bounds.minY + height * 0.76,
+                backZ + depth * 0.72,
+                (p) => Math.abs(p.lr - cx) < width * 0.18 && relY(p) > 0.68 && relY(p) < 0.84 && relZ(p) > 0.38,
+                { x: 1.2, y: 1.7, z: 0.8 }
+            );
+
+            const earZone = (p) => relY(p) > 0.35 && relY(p) < 0.62 && relZ(p) > 0.18 && relZ(p) < 0.66;
+            const leftEar = surfacePoint(
+                bounds.minX + width * 0.15,
+                bounds.minY + height * 0.52,
+                backZ + depth * 0.45,
+                (p) => earZone(p) && relX(p) > 0.06 && relX(p) < 0.30,
+                { x: 1.5, y: 1.4, z: 1.1 }
+            );
+            const rightEar = surfacePoint(
+                bounds.minX + width * 0.85,
+                bounds.minY + height * 0.52,
+                backZ + depth * 0.45,
+                (p) => earZone(p) && relX(p) > 0.70 && relX(p) < 0.94,
+                { x: 1.5, y: 1.4, z: 1.1 }
+            );
+            const detected = {
+                headTop,
+                leftEar,
+                rightEar,
+                eyebrowCenter: eyebrowCenter || noseRoot,
+                occipital,
+                leftEye,
+                rightEye,
+                hairline,
+                noseRoot: noseRoot || noseTip,
+                noseTip,
+                chin
+            };
+
+            Object.entries(detected).forEach(([key, point]) => {
+                if (point) placeMarker(key, point);
+            });
+
+            updateMeasurements();
+            const count = Object.values(detected).filter(Boolean).length;
+            document.getElementById('status').textContent = `自动检测完成，已识别 ${count}/${Object.keys(pointNames).length} 个关键点`;
+            window.__headDebug.detected = Object.fromEntries(
+                Object.entries(detected).map(([key, point]) => [key, point ? {
+                    lr: axisValue(point, 'lr'),
+                    up: axisValue(point, 'up'),
+                    fb: axisValue(point, 'fb'),
+                    x: point.x,
+                    y: point.y,
+                    z: point.z
+                } : null])
+            );
+            window.__headDebug.detected.backPoint = window.__headDebug.detected.occipital;
+            window.__headDebug.landmarkConstraints = {
+                faceMidlineX,
+                headTopY,
+                chinY,
+                headHeight: semanticHeadHeight,
+                headWidth,
+                faceHeight,
+                verticalSign,
+                eyeBandMinY,
+                eyeBandMaxY,
+                eyeBandY,
+                eyeDetection: {
+                    left: { fallback: leftEyeResult.fallback, reason: leftEyeResult.reason },
+                    right: { fallback: rightEyeResult.fallback, reason: rightEyeResult.reason },
+                    pairFallbackUsed: eyeFallbackUsed,
+                    pupilDistanceMm: finalPupilDistanceMm,
+                    allowedPupilDistanceMm: [50, 70]
+                },
+                noseBridgeLine,
+                eyeCenterY,
+                nasionSearchMinY,
+                nasionSearchMaxY,
+                browMinY,
+                browMaxY
+            };
+            document.body.dataset.headDebug = JSON.stringify({
+                detected: window.__headDebug.detected,
+                landmarkConstraints: window.__headDebug.landmarkConstraints,
+                selectedFaceSide: window.__headDebug.selectedFaceSide
+            });
+            console.group('Head auto-detect semantic debug');
+            console.log('candidateA faceScore', window.__headDebug.positive.score, window.__headDebug.positive.faceScore);
+            console.log('candidateB faceScore', window.__headDebug.negative.score, window.__headDebug.negative.faceScore);
+            console.log('selected face side', window.__headDebug.selectedFaceSide, window.__headDebug.axes);
+            console.log('landmark constraints', window.__headDebug.landmarkConstraints);
+            console.log('landmark constraints json', JSON.stringify(window.__headDebug.landmarkConstraints));
+            console.log('detected landmarks json', JSON.stringify(window.__headDebug.detected));
+            console.table(window.__headDebug.detected);
+            console.groupEnd();
+        }
+
+        function convexHull(points) {
+            if (points.length < 3) return points;
+            
+            const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+            
+            points.sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+            
+            const lower = [];
+            for (let p of points) {
+                while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+                    lower.pop();
+                }
+                lower.push(p);
+            }
+            
+            const upper = [];
+            for (let i = points.length - 1; i >= 0; i--) {
+                const p = points[i];
+                while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+                    upper.pop();
+                }
+                upper.push(p);
+            }
+            
+            upper.pop();
+            lower.pop();
+            return lower.concat(upper);
+        }
+
+        function calculateArcLength(p1, p2, p3) {
+            // 计算三点确定的平面
+            const v1 = new THREE.Vector3().subVectors(p2, p1);
+            const v2 = new THREE.Vector3().subVectors(p3, p1);
+            const planeNormal = new THREE.Vector3().crossVectors(v1, v2).normalize();
+            
+            // 计算平面中心点
+            const midPoint = new THREE.Vector3().addVectors(p1, p2).add(p3).multiplyScalar(1/3);
+            
+            // 获取模型顶点
+            let vertices = [];
+            mesh.traverse((child) => {
+                if (child.isMesh && child.geometry) {
+                    const positions = child.geometry.attributes.position;
+                    for (let i = 0; i < positions.count; i++) {
+                        const pv = new THREE.Vector3();
+                        pv.fromBufferAttribute(positions, i);
+                        child.localToWorld(pv);
+                        vertices.push(pv);
+                    }
+                }
+            });
+            
+            // 在平面附近截取截面点并投影
+            const tolerance = size.x * 0.03;
+            const sectionVertices = [];
+            vertices.forEach(v => {
+                const dist = Math.abs(planeNormal.dot(v.clone().sub(midPoint)));
+                if (dist < tolerance) {
+                    const local = v.clone().sub(midPoint);
+                    const d = planeNormal.dot(local);
+                    const projected = v.clone().sub(planeNormal.clone().multiplyScalar(d));
+                    sectionVertices.push(projected);
+                }
+            });
+            
+            // 在截面采样点中找到最接近三个标记点的点
+            const findNearestPoint = (target) => {
+                let nearest = null;
+                let minDist = Infinity;
+                sectionVertices.forEach(v => {
+                    const dist = v.distanceTo(target);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearest = v;
+                    }
+                });
+                return nearest;
+            };
+            
+            const p1_proj = findNearestPoint(p1);
+            const p2_proj = findNearestPoint(p2);
+            const p3_proj = findNearestPoint(p3);
+            
+            if (p1_proj && p2_proj && p3_proj && sectionVertices.length > 10) {
+                // 构建平面局部坐标系
+                const planeY = axisVector('up');
+                planeY.sub(planeNormal.clone().multiplyScalar(planeNormal.dot(planeY))).normalize();
+                const planeZ = new THREE.Vector3();
+                planeZ.crossVectors(planeNormal, planeY).normalize();
+                
+                // 将所有截面点转换到平面局部坐标系
+                const localPoints = sectionVertices.map(v => {
+                    const local = v.clone().sub(midPoint);
+                    return {
+                        x: planeY.dot(local),
+                        y: planeZ.dot(local),
+                        world: v
+                    };
+                });
+                
+                // 将三个标记点也转换到局部坐标系
+                const p1_local = { x: planeY.dot(p1_proj.clone().sub(midPoint)), y: planeZ.dot(p1_proj.clone().sub(midPoint)) };
+                const p2_local = { x: planeY.dot(p2_proj.clone().sub(midPoint)), y: planeZ.dot(p2_proj.clone().sub(midPoint)) };
+                const p3_local = { x: planeY.dot(p3_proj.clone().sub(midPoint)), y: planeZ.dot(p3_proj.clone().sub(midPoint)) };
+                
+                // 按角度排序点
+                const centerX = (p1_local.x + p2_local.x + p3_local.x) / 3;
+                const centerY = (p1_local.y + p2_local.y + p3_local.y) / 3;
+                
+                localPoints.forEach(p => {
+                    p.angle = Math.atan2(p.y - centerY, p.x - centerX);
+                });
+                
+                p1_local.angle = Math.atan2(p1_local.y - centerY, p1_local.x - centerX);
+                p2_local.angle = Math.atan2(p2_local.y - centerY, p2_local.x - centerX);
+                p3_local.angle = Math.atan2(p3_local.y - centerY, p3_local.x - centerX);
+                
+                // 找到三个标记点在排序后的索引
+                const sortedPoints = [...localPoints].sort((a, b) => a.angle - b.angle);
+                
+                let idx1 = -1, idx2 = -1, idx3 = -1;
+                let minDiff1 = Infinity, minDiff2 = Infinity, minDiff3 = Infinity;
+                
+                sortedPoints.forEach((p, i) => {
+                    const diff1 = Math.abs(p.angle - p1_local.angle);
+                    const diff2 = Math.abs(p.angle - p2_local.angle);
+                    const diff3 = Math.abs(p.angle - p3_local.angle);
+                    if (diff1 < minDiff1) { idx1 = i; minDiff1 = diff1; }
+                    if (diff2 < minDiff2) { idx2 = i; minDiff2 = diff2; }
+                    if (diff3 < minDiff3) { idx3 = i; minDiff3 = diff3; }
+                });
+                
+                // 根据角度顺序计算路径长度
+                if (idx1 !== -1 && idx2 !== -1 && idx3 !== -1) {
+                    const indices = [idx1, idx2, idx3].sort((a, b) => a - b);
+                    
+                    // 提取路径点（沿着截面轮廓，保留原始采样点）
+                    const pathPoints = [];
+                    for (let i = indices[0]; i <= indices[2]; i++) {
+                        pathPoints.push(sortedPoints[i].world.clone());
+                    }
+                    const circularPath = (start, end) => {
+                        const path = [];
+                        let i = start;
+                        while (true) {
+                            path.push(i);
+                            if (i === end) break;
+                            i = (i + 1) % sortedPoints.length;
+                        }
+                        return path;
+                    };
+                    const forward = circularPath(idx1, idx3);
+                    const backward = circularPath(idx3, idx1);
+                    const chosenPath = forward.includes(idx2) ? forward : backward;
+                    pathPoints.length = 0;
+                    chosenPath.forEach(i => pathPoints.push(sortedPoints[i].world.clone()));
+                    
+                    // 使用高密度采样的Catmull-Rom样条插值，减少过度平滑
+                    // 保留原始轮廓形状，只做适度插值
+                    const interpolatedPoints = [];
+                    const maxT = pathPoints.length - 1;
+                    const highDensitySamples = 200;
+                    
+                    for (let i = 0; i < highDensitySamples; i++) {
+                        const t = (i / (highDensitySamples - 1)) * maxT;
+                        interpolatedPoints.push(catmullRomSpline(pathPoints, t));
+                    }
+                    
+                    // 计算弧长
+                    let length = 0;
+                    for (let i = 0; i < interpolatedPoints.length - 1; i++) {
+                        length += interpolatedPoints[i].distanceTo(interpolatedPoints[i + 1]);
+                    }
+                    return length;
+                }
+            }
+            
+            // 回退到贝塞尔曲线计算
+            let length = 0;
+            const numSegments = 50;
+            for (let i = 0; i < numSegments; i++) {
+                const t1 = i / numSegments;
+                const t2 = (i + 1) / numSegments;
+                const q1 = quadraticBezier(p1, p2, p3, t1);
+                const q2 = quadraticBezier(p1, p2, p3, t2);
+                length += q1.distanceTo(q2);
+            }
+            return length;
+        }
+
+        function catmullRomSpline(points, t) {
+            const n = points.length;
+            if (n < 2) return points[0] || new THREE.Vector3();
+            
+            const p0 = points[Math.max(0, Math.floor(t) - 1)];
+            const p1 = points[Math.min(n - 1, Math.max(0, Math.floor(t)))];
+            const p2 = points[Math.min(n - 1, Math.floor(t) + 1)];
+            const p3 = points[Math.min(n - 1, Math.floor(t) + 2)];
+            
+            const localT = t - Math.floor(t);
+            const t2 = localT * localT;
+            const t3 = t2 * localT;
+            
+            const x = 0.5 * ((2 * p1.x) +
+                (-p0.x + p2.x) * localT +
+                (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+                (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+            
+            const y = 0.5 * ((2 * p1.y) +
+                (-p0.y + p2.y) * localT +
+                (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+                (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
+            
+            const z = 0.5 * ((2 * p1.z) +
+                (-p0.z + p2.z) * localT +
+                (2 * p0.z - 5 * p1.z + 4 * p2.z - p3.z) * t2 +
+                (-p0.z + 3 * p1.z - 3 * p2.z + p3.z) * t3);
+            
+            return new THREE.Vector3(x, y, z);
+        }
+        
+        function smoothCurve(points, numSamples = 100, iterations = 0, focusRegion = false) {
+            if (points.length < 2) return points;
+            
+            let smoothed = [];
+            const maxT = points.length - 1;
+            
+            if (focusRegion && points.length >= 3) {
+                // 在头顶与耳屏之间增加采样密度（针对头横维）
+                // 假设中间点是头顶，两端是耳屏
+                const midIndex = Math.floor(points.length / 2);
+                const totalSegments = numSamples;
+                
+                // 前段（起点到顶点）和后段（顶点到终点）各占一半，但顶点附近更密集
+                const halfSamples = Math.floor(totalSegments / 2);
+                
+                // 前段：起点到顶点，使用非线性采样，顶点附近更密集
+                for (let i = 0; i <= halfSamples; i++) {
+                    const t = Math.pow(i / halfSamples, 0.5);  // 平方根分布，靠近顶点更密集
+                    const actualT = t * midIndex;
+                    smoothed.push(catmullRomSpline(points, actualT));
+                }
+                
+                // 后段：顶点到终点，同样使用非线性采样
+                for (let i = 1; i <= halfSamples; i++) {
+                    const t = Math.pow(i / halfSamples, 0.5);
+                    const actualT = midIndex + t * (maxT - midIndex);
+                    smoothed.push(catmullRomSpline(points, actualT));
+                }
+            } else {
+                // 均匀采样
+                for (let i = 0; i < numSamples; i++) {
+                    const t = (i / (numSamples - 1)) * maxT;
+                    smoothed.push(catmullRomSpline(points, t));
+                }
+            }
+            
+            // 额外的平滑迭代 - 移动平均滤波
+            for (let iter = 0; iter < iterations; iter++) {
+                const temp = [...smoothed];
+                const kernelSize = 5;
+                for (let i = 0; i < smoothed.length; i++) {
+                    let sumX = 0, sumY = 0, sumZ = 0;
+                    let count = 0;
+                    for (let k = -kernelSize; k <= kernelSize; k++) {
+                        const idx = i + k;
+                        if (idx >= 0 && idx < smoothed.length) {
+                            sumX += smoothed[idx].x;
+                            sumY += smoothed[idx].y;
+                            sumZ += smoothed[idx].z;
+                            count++;
+                        }
+                    }
+                    temp[i] = new THREE.Vector3(sumX / count, sumY / count, sumZ / count);
+                }
+                smoothed = temp;
+            }
+            
+            return smoothed;
+        }
+
+        function quadraticBezier(p0, p1, p2, t) {
+            const mt = 1 - t;
+            return new THREE.Vector3(
+                mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x,
+                mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y,
+                mt * mt * p0.z + 2 * mt * t * p1.z + t * t * p2.z
+            );
+        }
+
+        function displayCircumferenceSection2(eyebrowCenter, occipital, planeNormal, planeY, planeZ, midPoint, sectionVertices, hull) {
+            // 移除之前的截面可视化
+            measurementGroup.children = measurementGroup.children.filter(child => 
+                child.name !== 'circumferencePlane' && 
+                child.name !== 'circumferenceHull' &&
+                child.name !== 'circumferencePoints'
+            );
+            
+            // 显示截面平面
+            const planeGeo = new THREE.PlaneGeometry(size.x * 1.5, size.y * 1.5);
+            const planeMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xff6600, 
+                transparent: true, 
+                opacity: 0.3,
+                side: THREE.DoubleSide 
+            });
+            const plane = new THREE.Mesh(planeGeo, planeMaterial);
+            plane.position.copy(midPoint);
+            
+            // 旋转平面使其法向量与 planeNormal 一致
+            const lookAt = new THREE.Vector3();
+            lookAt.copy(midPoint).add(planeNormal);
+            plane.lookAt(lookAt);
+            
+            plane.name = 'circumferencePlane';
+            measurementGroup.add(plane);
+            
+            // 显示截面点（采样显示）- 投影到平面上
+            if (sectionVertices.length > 0) {
+                const pointGeo = new THREE.BufferGeometry();
+                const pointPositions = [];
+                const step = Math.max(1, Math.floor(sectionVertices.length / 50));
+                for (let i = 0; i < sectionVertices.length; i += step) {
+                    const p = sectionVertices[i];
+                    // 将点投影到平面上
+                    const local = p.clone().sub(midPoint);
+                    const dist = planeNormal.dot(local);
+                    const projected = p.clone().sub(planeNormal.clone().multiplyScalar(dist));
+                    pointPositions.push(projected.x, projected.y, projected.z);
+                }
+                pointGeo.setAttribute('position', new THREE.Float32BufferAttribute(pointPositions, 3));
+                const pointsMaterial = new THREE.PointsMaterial({ color: 0xffff00, size: 3 });
+                const points = new THREE.Points(pointGeo, pointsMaterial);
+                points.name = 'circumferencePoints';
+                measurementGroup.add(points);
+            }
+            
+            // 显示凸包轮廓 - 投影到平面上
+            if (hull && hull.length > 2) {
+                const hullPoints = [];
+                hull.forEach(p => {
+                    // 将凸包点从局部坐标转换回世界坐标
+                    const worldPoint = midPoint.clone()
+                        .add(planeY.clone().multiplyScalar(p.x))
+                        .add(planeZ.clone().multiplyScalar(p.y));
+                    hullPoints.push(worldPoint);
+                });
+                hullPoints.push(hullPoints[0].clone()); // 闭合
+                
+                const hullGeo = new THREE.BufferGeometry().setFromPoints(hullPoints);
+                const hullMaterial = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3 });
+                const hullLine = new THREE.Line(hullGeo, hullMaterial);
+                hullLine.name = 'circumferenceHull';
+                measurementGroup.add(hullLine);
+            }
+        }
+
+        function updateMeasurements() {
+            if (!box || !center || !size || !mesh) return;
+            
+            let vertices = [];
+            mesh.traverse((child) => {
+                if (child.isMesh && child.geometry) {
+                    const positions = child.geometry.attributes.position;
+                    for (let i = 0; i < positions.count; i++) {
+                        const p = new THREE.Vector3();
+                        p.fromBufferAttribute(positions, i);
+                        child.localToWorld(p);
+                        vertices.push(p);
+                    }
+                }
+            });
+
+            if (markedPoints.eyebrowCenter && markedPoints.occipital) {
+                // 计算以 X 方向为轴，且过眉心和枕后点的平面
+                // 平面法向量 = X 轴 × (枕后点 - 眉心) 向量
+                const planeNormal = new THREE.Vector3();
+                planeNormal.subVectors(markedPoints.occipital, markedPoints.eyebrowCenter);
+                
+                // X 轴方向向量
+                const xAxis = axisVector('lr');
+                
+                // 计算平面法向量：X 轴 × 眉心 - 枕后点向量
+                planeNormal.crossVectors(xAxis, planeNormal).normalize();
+                
+                // 在该平面附近截取截面点（距离平面在 tolerance 范围内）
+                const tolerance = size.x * 0.03;
+                const sectionVertices = vertices.filter(v => {
+                    const dist = Math.abs(planeNormal.dot(v.clone().sub(markedPoints.eyebrowCenter)));
+                    return dist < tolerance;
+                });
+                
+                if (sectionVertices.length > 10) {
+                    // 将点投影到过眉心和枕后点的平面上
+                    const midPoint = new THREE.Vector3();
+                    midPoint.addVectors(markedPoints.eyebrowCenter, markedPoints.occipital).multiplyScalar(0.5);
+                    
+                    // 构建平面局部坐标系
+                    // Y 轴：世界 Y 轴投影到平面上
+                    const planeY = axisVector('up');
+                    planeY.sub(planeNormal.clone().multiplyScalar(planeNormal.dot(planeY))).normalize();
+                    
+                    // Z 轴：平面法向量 × 平面 Y 轴
+                    const planeZ = new THREE.Vector3();
+                    planeZ.crossVectors(planeNormal, planeY).normalize();
+                    
+                    const points2D = sectionVertices.map(p => {
+                        const local = p.clone().sub(midPoint);
+                        return {
+                            x: planeY.dot(local),  // Y 方向坐标
+                            y: planeZ.dot(local)   // Z 方向坐标
+                        };
+                    });
+                    
+                    const hull = convexHull(points2D);
+                    
+                    if (hull.length > 2) {
+                        let circumference = 0;
+                        for (let i = 0; i < hull.length; i++) {
+                            const p1 = new THREE.Vector2(hull[i].x, hull[i].y);
+                            const p2 = new THREE.Vector2(hull[(i + 1) % hull.length].x, hull[(i + 1) % hull.length].y);
+                            circumference += p1.distanceTo(p2);
+                        }
+                        
+                        // 应用单位转换系数
+                        const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
+                        document.getElementById('circumferenceValue').textContent = (circumference * scaleFactor).toFixed(2) + ' mm';
+                    }
+                    
+                    // 显示截面可视化
+                    displayCircumferenceSection2(markedPoints.eyebrowCenter, markedPoints.occipital, planeNormal, planeY, planeZ, midPoint, sectionVertices, hull);
+                }
+            }
+
+            if (markedPoints.leftEar && markedPoints.rightEar) {
+                const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
+                const headWidth = Math.abs(axisValue(markedPoints.rightEar, 'lr') - axisValue(markedPoints.leftEar, 'lr')) * scaleFactor;
+                document.getElementById('widthValue').textContent = headWidth.toFixed(2) + ' mm';
+            }
+
+            if (markedPoints.noseTip && markedPoints.occipital) {
+                const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
+                const headLength = Math.abs(axisValue(markedPoints.occipital, 'fb') - axisValue(markedPoints.noseTip, 'fb')) * scaleFactor;
+                document.getElementById('lengthValue').textContent = headLength.toFixed(2) + ' mm';
+            }
+
+            if (markedPoints.headTop && markedPoints.chin) {
+                const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
+                const headHeight = Math.abs(axisValue(markedPoints.headTop, 'up') - axisValue(markedPoints.chin, 'up')) * scaleFactor;
+                document.getElementById('heightValue').textContent = headHeight.toFixed(2) + ' mm';
+            }
+
+            if (markedPoints.headTop && markedPoints.leftEar && markedPoints.rightEar) {
+                const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
+                const earPlaneY = (axisValue(markedPoints.leftEar, 'up') + axisValue(markedPoints.rightEar, 'up')) / 2;
+                const earHeight = Math.abs(axisValue(markedPoints.headTop, 'up') - earPlaneY) * scaleFactor;
+                document.getElementById('earHeightValue').textContent = earHeight.toFixed(2) + ' mm';
+            }
+
+            if (markedPoints.leftEye && markedPoints.rightEye) {
+                const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
+                const pupilDistance = markedPoints.leftEye.distanceTo(markedPoints.rightEye) * scaleFactor;
+                document.getElementById('pupilDistanceValue').textContent = pupilDistance.toFixed(2) + ' mm';
+            }
+
+            if (markedPoints.noseRoot && markedPoints.leftEar) {
+                const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
+                const earNoseDistance = Math.abs(axisValue(markedPoints.leftEar, 'fb') - axisValue(markedPoints.noseRoot, 'fb')) * scaleFactor;
+                document.getElementById('earNoseDistanceValue').textContent = earNoseDistance.toFixed(2) + ' mm';
+            }
+
+            if (markedPoints.leftEar && markedPoints.headTop && markedPoints.rightEar) {
+                const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
+                
+                let earToHeadArc = calculateArcLength(markedPoints.leftEar, markedPoints.headTop, markedPoints.rightEar);
+                const earChord = markedPoints.leftEar.distanceTo(markedPoints.rightEar);
+                const crownRise = Math.max(
+                    0,
+                    axisValue(markedPoints.headTop, 'up') - (axisValue(markedPoints.leftEar, 'up') + axisValue(markedPoints.rightEar, 'up')) / 2
+                );
+                const a = earChord / 2;
+                const b = Math.max(crownRise, a * 0.35);
+                const ellipseArc = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))) / 2;
+                if (!Number.isFinite(earToHeadArc) || earToHeadArc > ellipseArc * 1.8) {
+                    earToHeadArc = ellipseArc;
+                }
+                
+                const transverseArc = earToHeadArc * scaleFactor;
+                document.getElementById('transverseArcValue').textContent = transverseArc.toFixed(2) + ' mm';
+                
+                displayArcWithPlane('transverse', markedPoints.leftEar, markedPoints.headTop, markedPoints.rightEar, 0x00ff88);
+            } else {
+                // 移除弧线、截面、采样点、弧线点和直线
+                measurementGroup.children = measurementGroup.children.filter(child => 
+                    child.name !== 'transverseArc' && 
+                    child.name !== 'transversePlane' &&
+                    child.name !== 'transverseSectionPoints' &&
+                    child.name !== 'transverseArcPoints' &&
+                    child.name !== 'transverseLeftLine' &&
+                    child.name !== 'transverseRightLine'
+                );
+            }
+
+            if (markedPoints.eyebrowCenter && markedPoints.headTop && markedPoints.occipital) {
+                const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
+                const longitudinalArc = calculateArcLength(markedPoints.eyebrowCenter, markedPoints.headTop, markedPoints.occipital) * scaleFactor;
+                document.getElementById('longitudinalArcValue').textContent = longitudinalArc.toFixed(2) + ' mm';
+                // 显示头纵维弧线和截面
+                displayArcWithPlane('longitudinal', markedPoints.eyebrowCenter, markedPoints.headTop, markedPoints.occipital, 0xff00ff);
+            } else {
+                // 移除弧线、截面、采样点和弧线点
+                measurementGroup.children = measurementGroup.children.filter(child => 
+                    child.name !== 'longitudinalArc' && 
+                    child.name !== 'longitudinalPlane' &&
+                    child.name !== 'longitudinalSectionPoints' &&
+                    child.name !== 'longitudinalArcPoints'
+                );
+            }
+        }
+
+        function displayLine(name, p1, p2, color) {
+            // 移除之前的直线
+            measurementGroup.children = measurementGroup.children.filter(child => 
+                child.name !== name
+            );
+            
+            // 创建直线
+            const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+            const lineMaterial = new THREE.LineBasicMaterial({ color: color, linewidth: 2, dashed: true });
+            const line = new THREE.Line(lineGeo, lineMaterial);
+            line.name = name;
+            measurementGroup.add(line);
+        }
+
+        function displayArcWithPlane(name, p1, p2, p3, color) {
+            // 移除之前的弧线、截面和采样点
+            measurementGroup.children = measurementGroup.children.filter(child => 
+                child.name !== name + 'Arc' && 
+                child.name !== name + 'Plane' &&
+                child.name !== name + 'SectionPoints' &&
+                child.name !== name + 'ArcPoints'
+            );
+            
+            // 计算三点确定的平面
+            const v1 = new THREE.Vector3().subVectors(p2, p1);
+            const v2 = new THREE.Vector3().subVectors(p3, p1);
+            const planeNormal = new THREE.Vector3().crossVectors(v1, v2).normalize();
+            
+            // 计算平面中心点（三点的平均）
+            const midPoint = new THREE.Vector3().addVectors(p1, p2).add(p3).multiplyScalar(1/3);
+            
+            // 获取模型顶点用于截面采样
+            let vertices = [];
+            mesh.traverse((child) => {
+                if (child.isMesh && child.geometry) {
+                    const positions = child.geometry.attributes.position;
+                    for (let i = 0; i < positions.count; i++) {
+                        const pv = new THREE.Vector3();
+                        pv.fromBufferAttribute(positions, i);
+                        child.localToWorld(pv);
+                        vertices.push(pv);
+                    }
+                }
+            });
+            
+            // 在该平面附近截取截面点并投影到平面上
+            const tolerance = size.x * 0.03;
+            const sectionVertices = [];
+            vertices.forEach(v => {
+                const dist = Math.abs(planeNormal.dot(v.clone().sub(midPoint)));
+                if (dist < tolerance) {
+                    // 投影到平面上
+                    const local = v.clone().sub(midPoint);
+                    const d = planeNormal.dot(local);
+                    const projected = v.clone().sub(planeNormal.clone().multiplyScalar(d));
+                    sectionVertices.push(projected);
+                }
+            });
+            
+            // 显示截面采样点
+            if (sectionVertices.length > 10) {
+                const pointPositions = [];
+                const step = Math.max(1, Math.floor(sectionVertices.length / 50));
+                for (let i = 0; i < sectionVertices.length; i += step) {
+                    const p = sectionVertices[i];
+                    pointPositions.push(p.x, p.y, p.z);
+                }
+                const pointGeo = new THREE.BufferGeometry();
+                pointGeo.setAttribute('position', new THREE.Float32BufferAttribute(pointPositions, 3));
+                const pointsMaterial = new THREE.PointsMaterial({ color: color, size: 2 });
+                const points = new THREE.Points(pointGeo, pointsMaterial);
+                points.name = name + 'SectionPoints';
+                measurementGroup.add(points);
+            }
+            
+            // 创建截面平面（仅用于显示参考）
+            const planeSize = Math.max(size.x, size.y, size.z) * 1.2;
+            const planeGeo = new THREE.PlaneGeometry(planeSize, planeSize);
+            const planeMaterial = new THREE.MeshBasicMaterial({ 
+                color: color, 
+                transparent: true, 
+                opacity: 0.15,
+                side: THREE.DoubleSide 
+            });
+            const plane = new THREE.Mesh(planeGeo, planeMaterial);
+            plane.position.copy(midPoint);
+            
+            // 旋转平面使其朝向正确
+            const lookAt = new THREE.Vector3().copy(midPoint).add(planeNormal);
+            plane.lookAt(lookAt);
+            
+            plane.name = name + 'Plane';
+            measurementGroup.add(plane);
+            
+            // 在截面采样点中找到最接近三个标记点的点
+            const findNearestPoint = (target) => {
+                let nearest = null;
+                let minDist = Infinity;
+                sectionVertices.forEach(v => {
+                    const dist = v.distanceTo(target);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearest = v;
+                    }
+                });
+                return nearest;
+            };
+            
+            const p1_proj = findNearestPoint(p1);
+            const p2_proj = findNearestPoint(p2);
+            const p3_proj = findNearestPoint(p3);
+            
+            if (p1_proj && p2_proj && p3_proj && sectionVertices.length > 10) {
+                // 构建平面局部坐标系
+                const planeY = axisVector('up');
+                planeY.sub(planeNormal.clone().multiplyScalar(planeNormal.dot(planeY))).normalize();
+                const planeZ = new THREE.Vector3();
+                planeZ.crossVectors(planeNormal, planeY).normalize();
+                
+                // 将所有截面点转换到平面局部坐标系
+                const localPoints = sectionVertices.map(v => {
+                    const local = v.clone().sub(midPoint);
+                    return {
+                        x: planeY.dot(local),
+                        y: planeZ.dot(local),
+                        world: v
+                    };
+                });
+                
+                // 将三个标记点也转换到局部坐标系
+                const p1_local = {
+                    x: planeY.dot(p1_proj.clone().sub(midPoint)),
+                    y: planeZ.dot(p1_proj.clone().sub(midPoint))
+                };
+                const p2_local = {
+                    x: planeY.dot(p2_proj.clone().sub(midPoint)),
+                    y: planeZ.dot(p2_proj.clone().sub(midPoint))
+                };
+                const p3_local = {
+                    x: planeY.dot(p3_proj.clone().sub(midPoint)),
+                    y: planeZ.dot(p3_proj.clone().sub(midPoint))
+                };
+                
+                // 找到从p1到p2到p3的路径点（在截面采样点中）
+                const arcPath = [];
+                
+                // 按角度排序点，找到从p1到p2到p3的路径
+                const centerX = (p1_local.x + p2_local.x + p3_local.x) / 3;
+                const centerY = (p1_local.y + p2_local.y + p3_local.y) / 3;
+                
+                // 计算每个点相对于中心的角度
+                localPoints.forEach(p => {
+                    p.angle = Math.atan2(p.y - centerY, p.x - centerX);
+                });
+                
+                // 计算三个标记点的角度
+                p1_local.angle = Math.atan2(p1_local.y - centerY, p1_local.x - centerX);
+                p2_local.angle = Math.atan2(p2_local.y - centerY, p2_local.x - centerX);
+                p3_local.angle = Math.atan2(p3_local.y - centerY, p3_local.x - centerX);
+                
+                // 找到从p1到p2到p3的路径
+                const sortedPoints = [...localPoints].sort((a, b) => a.angle - b.angle);
+                
+                // 找到三个标记点在排序后的索引
+                let idx1 = -1, idx2 = -1, idx3 = -1;
+                let minDiff1 = Infinity, minDiff2 = Infinity, minDiff3 = Infinity;
+                
+                sortedPoints.forEach((p, i) => {
+                    const diff1 = Math.abs(p.angle - p1_local.angle);
+                    const diff2 = Math.abs(p.angle - p2_local.angle);
+                    const diff3 = Math.abs(p.angle - p3_local.angle);
+                    if (diff1 < minDiff1) { idx1 = i; minDiff1 = diff1; }
+                    if (diff2 < minDiff2) { idx2 = i; minDiff2 = diff2; }
+                    if (diff3 < minDiff3) { idx3 = i; minDiff3 = diff3; }
+                });
+                
+                // 根据角度顺序确定路径方向
+                if (idx1 !== -1 && idx2 !== -1 && idx3 !== -1) {
+                    // 确定从p1到p2到p3的正确顺序
+                    const indices = [idx1, idx2, idx3].sort((a, b) => a - b);
+                    
+                    // 沿排序后的点选取路径
+                    for (let i = indices[0]; i <= indices[2]; i++) {
+                        arcPath.push(sortedPoints[i].world.clone());
+                    }
+                    
+                    // 如果点太少，使用二次贝塞尔曲线作为备选
+                    if (arcPath.length < 5) {
+                        arcPath.length = 0;
+                        const numSegments = 30;
+                        for (let i = 0; i <= numSegments; i++) {
+                            const t = i / numSegments;
+                            const point = quadraticBezier(p1_proj, p2_proj, p3_proj, t);
+                            arcPath.push(point);
+                        }
+                    }
+                } else {
+                    // 回退到贝塞尔曲线
+                    const numSegments = 30;
+                    for (let i = 0; i <= numSegments; i++) {
+                        const t = i / numSegments;
+                        const point = quadraticBezier(p1_proj, p2_proj, p3_proj, t);
+                        arcPath.push(point);
+                    }
+                }
+                
+                // 使用高密度Catmull-Rom插值，不做过度平滑，保持贴近轮廓
+                const interpolatedArcPath = [];
+                if (arcPath.length > 2) {
+                    const maxT = arcPath.length - 1;
+                    const highDensitySamples = 200;
+                    for (let i = 0; i < highDensitySamples; i++) {
+                        const t = (i / (highDensitySamples - 1)) * maxT;
+                        interpolatedArcPath.push(catmullRomSpline(arcPath, t));
+                    }
+                } else {
+                    interpolatedArcPath.push(...arcPath);
+                }
+                
+                // 创建弧线（使用插值后的路径，贴近轮廓）
+                const arcGeo = new THREE.BufferGeometry().setFromPoints(interpolatedArcPath);
+                const arcMaterial = new THREE.LineBasicMaterial({ color: color, linewidth: 3 });
+                const arcLine = new THREE.Line(arcGeo, arcMaterial);
+                arcLine.name = name + 'Arc';
+                measurementGroup.add(arcLine);
+                
+                // 在弧线上添加采样点（使用插值后的路径）
+                const arcSamplePoints = [];
+                const step = Math.max(1, Math.floor(interpolatedArcPath.length / 10));
+                for (let i = 0; i < interpolatedArcPath.length; i += step) {
+                    arcSamplePoints.push(interpolatedArcPath[i].x, interpolatedArcPath[i].y, interpolatedArcPath[i].z);
+                }
+                const arcPointGeo = new THREE.BufferGeometry();
+                arcPointGeo.setAttribute('position', new THREE.Float32BufferAttribute(arcSamplePoints, 3));
+                const arcPointMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 4 });
+                const arcPointsObj = new THREE.Points(arcPointGeo, arcPointMaterial);
+                arcPointsObj.name = name + 'ArcPoints';
+                measurementGroup.add(arcPointsObj);
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        init();
+        window.loadModel = loadModel;
+        window.setMarkMode = setMarkMode;
+        window.resetMarks = resetMarks;
+        window.autoDetectPoints = autoDetectPoints;
+    </script>
+</body>
+</html>
