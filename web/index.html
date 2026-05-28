@@ -43,6 +43,9 @@
             position: absolute; top: 20px; right: 20px; z-index: 150; 
             background: rgba(0, 0, 0, 0.9); padding: 10px 14px; border-radius: 8px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            width: min(520px, calc(100vw - 360px));
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
         }
         select, button {
             padding: 8px 12px; border: none; border-radius: 5px;
@@ -54,12 +57,13 @@
         select { margin-right: 8px; }
         
         #markingPanel {
-            position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+            position: absolute; top: 78px; left: 340px; transform: none;
             background: rgba(0, 0, 0, 0.95); color: white;
             padding: 12px 20px; border-radius: 10px; font-size: 12px;
             z-index: 100; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
             display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-            max-width: 70vw;
+            max-width: min(520px, calc(100vw - 900px));
+            min-width: 320px;
             opacity: 0.5;
             pointer-events: auto;
             transition: opacity 0.3s;
@@ -91,6 +95,57 @@
             font-size: 12px; color: #888; margin: 10px 0 6px 0;
             padding-top: 8px; border-top: 1px solid #444;
         }
+        .batch-row { display: grid; grid-template-columns: 1fr 86px 96px 96px 104px 86px; gap: 8px; align-items: center; }
+        .batch-row button, .batch-row select { width: 100%; min-width: 0; }
+        .scale-row {
+            display: flex; align-items: center; gap: 8px; margin-top: 8px;
+        }
+        #batchPanel {
+            margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;
+            color: white; font-size: 12px;
+        }
+        #batchProgress {
+            display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px;
+            margin: 8px 0; color: #ddd;
+        }
+        #batchList {
+            max-height: min(190px, calc(100vh - 230px)); overflow-y: auto; border: 1px solid #444;
+            border-radius: 6px; margin-top: 8px; background: rgba(255,255,255,0.04);
+        }
+        .sample-row {
+            display: grid; grid-template-columns: minmax(150px, 1fr) 88px 74px;
+            gap: 8px; align-items: center; padding: 7px 8px; border-bottom: 1px solid #333;
+            cursor: pointer;
+        }
+        .sample-row:hover, .sample-row.active { background: rgba(255,255,255,0.10); }
+        .sample-row:last-child { border-bottom: none; }
+        .sample-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sample-status { font-size: 11px; color: #ddd; }
+        .sample-measure { font-size: 11px; color: #bbb; text-align: right; }
+        .status-ready { color: #aaa; }
+        .status-processing { color: #74b9ff; }
+        .status-complete { color: #2ecc71; }
+        .status-needs_review { color: #fdcb6e; }
+        .status-failed { color: #ff7675; }
+        @media (max-width: 1180px) {
+            #fileSelect {
+                left: 340px; right: 20px; width: auto;
+            }
+            #markingPanel {
+                top: 188px; left: 20px; right: 20px;
+                max-width: none; min-width: 0;
+            }
+        }
+        @media (max-width: 760px) {
+            #info { max-width: calc(100vw - 40px); }
+            #fileSelect {
+                top: 260px; left: 20px; right: 20px; width: auto;
+            }
+            #markingPanel {
+                top: auto; left: 20px; right: 20px; bottom: 88px;
+            }
+            .batch-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
     </style>
 </head>
 <body>
@@ -98,18 +153,34 @@
     <div id="loading"><div class="spinner"></div><div>加载中...</div></div>
     
     <div id="fileSelect">
-        <select id="modelSelect">
-            <option value="">加载中...</option>
-        </select>
-        <button onclick="loadModel()">加载模型</button>
-        <input type="file" id="modelUpload" accept=".obj" style="display:none;" onchange="handleModelUpload(event)">
-        <button onclick="document.getElementById('modelUpload').click()">上传OBJ模型</button>
-        <button onclick="downloadExcelData()">下载Excel</button>
-        <input type="number" id="scaleFactor" value="1.0" step="0.1" style="width:80px;padding:8px;border-radius:5px;border:none;background:#4a4a6a;color:white;margin-left:8px;" onchange="updateMeasurements()">
-        <label style="color:white;margin-left:4px;font-size:12px;">单位系数</label>
-        <button id="editToggle" style="margin-left:8px;padding:8px 16px;border-radius:5px;border:none;background:#e74c3c;color:white;font-weight:bold;">
-            🔒 锁定标记
-        </button>
+        <div class="batch-row">
+            <select id="modelSelect">
+                <option value="">加载中...</option>
+            </select>
+            <button onclick="loadModel()">加载模型</button>
+            <input type="file" id="modelUpload" accept=".obj" style="display:none;" onchange="handleModelUpload(event)">
+            <button onclick="document.getElementById('modelUpload').click()">上传OBJ模型</button>
+            <input type="file" id="batchUpload" accept=".obj" multiple style="display:none;" onchange="handleBatchUpload(event)">
+            <button onclick="document.getElementById('batchUpload').click()">批量上传OBJ</button>
+            <button onclick="startBatchMeasurement()">开始批量测量</button>
+            <button onclick="downloadExcelData()">导出Excel</button>
+        </div>
+        <div class="scale-row">
+            <input type="number" id="scaleFactor" value="1.0" step="0.1" style="width:100px;padding:8px;border-radius:5px;border:none;background:#4a4a6a;color:white;" onchange="handleScaleChange()">
+            <label style="color:white;font-size:12px;">单位系数</label>
+            <button id="editToggle" style="padding:8px 16px;border-radius:5px;border:none;background:#e74c3c;color:white;font-weight:bold;">
+                🔒 锁定标记
+            </button>
+        </div>
+        <div id="batchPanel">
+            <div id="batchProgress">
+                <span>处理进度：<strong id="batchDone">0</strong> / <strong id="batchTotal">0</strong></span>
+                <span>成功：<strong id="batchSuccess">0</strong></span>
+                <span>需复核：<strong id="batchReview">0</strong></span>
+                <span>失败：<strong id="batchFailed">0</strong></span>
+            </div>
+            <div id="batchList"></div>
+        </div>
     </div>
     
     <div id="markingPanel">
@@ -224,6 +295,14 @@
         let measurementAxes = { lr: 'x', up: 'y', fb: 'z', frontSign: -1 };
         let currentModelName = '';
         let uploadedModelUrl = null;
+        let currentSampleId = null;
+        let isRestoringSample = false;
+        let isBatchProcessing = false;
+        let suppressSceneRendering = false;
+        let draggingMarkMode = null;
+        let markerDragMoved = false;
+        let batchSamples = [];
+        let sampleIdCounter = 1;
         const MARK_STORAGE_VERSION = 'semantic-face-v1';
         const MARK_STORAGE_KEY = `headModelManualSettings:${MARK_STORAGE_VERSION}`;
         const LEGACY_MARK_STORAGE_KEYS = ['headModelMarkedPoints'];
@@ -238,6 +317,75 @@
             { id: 'transverseArcValue', label: '头横维' },
             { id: 'longitudinalArcValue', label: '头纵维' }
         ];
+        const batchStatusLabels = {
+            ready: '待处理',
+            processing: '处理中',
+            complete: '完成',
+            needs_review: '需复核',
+            failed: '失败'
+        };
+
+        function getScaleFactor() {
+            return parseFloat(document.getElementById('scaleFactor').value) || 1;
+        }
+
+        function waitForFrame() {
+            return new Promise(resolve => requestAnimationFrame(() => resolve()));
+        }
+
+        function serializePoint(point) {
+            return point ? { x: point.x, y: point.y, z: point.z } : null;
+        }
+
+        function deserializePoint(point) {
+            return point ? new THREE.Vector3(point.x, point.y, point.z) : null;
+        }
+
+        function serializeMarkedPoints() {
+            return Object.fromEntries(Object.keys(pointNames).map(key => [key, serializePoint(markedPoints[key])]));
+        }
+
+        function restoreMarkedPoints(points) {
+            isRestoringSample = true;
+            resetMarks({ silent: true });
+            Object.entries(points || {}).forEach(([key, point]) => {
+                if (pointNames[key] && point) placeMarker(key, deserializePoint(point), { silent: true });
+            });
+            isRestoringSample = false;
+            updateMeasurements({ skipSampleSync: true });
+        }
+
+        function getMeasurementSnapshot(decimals = 1) {
+            const values = {};
+            measurementRows.forEach(item => {
+                const text = document.getElementById(item.id)?.textContent || '';
+                const value = parseMeasurementValue(text);
+                values[item.id] = value === '' ? null : Number(Number(value).toFixed(decimals));
+            });
+            return values;
+        }
+
+        function getCurrentSample() {
+            return batchSamples.find(sample => sample.id === currentSampleId) || null;
+        }
+
+        function createSample(file) {
+            return {
+                id: `sample-${sampleIdCounter++}`,
+                file,
+                fileName: file.name,
+                objectUrl: URL.createObjectURL(file),
+                status: 'ready',
+                landmarks: {},
+                measurements: {},
+                axes: null,
+                detectedCount: 0,
+                reviewReasons: [],
+                errorMessage: '',
+                manuallyEdited: false,
+                processed: false
+            };
+        }
 
         function cleanupOldMarkedPointStorage() {
             LEGACY_MARK_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
@@ -330,6 +478,10 @@
             mouse = new THREE.Vector2();
 
             renderer.domElement.addEventListener('click', onMouseClick);
+            renderer.domElement.addEventListener('pointerdown', onPointerDown);
+            renderer.domElement.addEventListener('pointermove', onPointerMove);
+            renderer.domElement.addEventListener('pointerup', onPointerUp);
+            renderer.domElement.addEventListener('pointerleave', onPointerUp);
             
             // 绑定编辑模式切换按钮事件
             const editToggleBtn = document.getElementById('editToggle');
@@ -413,6 +565,7 @@
 
         function loadModel() {
             const fileName = document.getElementById('modelSelect').value;
+            currentSampleId = null;
             if (fileName.startsWith('upload:') && uploadedModelUrl) {
                 loadObjModel(uploadedModelUrl, fileName.replace(/^upload:/, ''), { useSavedMarks: false });
                 return;
@@ -420,50 +573,114 @@
             loadObjModel(`../models/${fileName}`, fileName, { useSavedMarks: true });
         }
 
+        function disposeObject(object) {
+            if (!object) return;
+            object.traverse((child) => {
+                if (!child.isMesh) return;
+                if (child.geometry) child.geometry.dispose();
+                const materials = Array.isArray(child.material) ? child.material : [child.material];
+                materials.filter(Boolean).forEach((material) => {
+                    Object.values(material).forEach((value) => {
+                        if (value && value.isTexture) value.dispose();
+                    });
+                    material.dispose();
+                });
+            });
+        }
+
+        function unloadCurrentModel() {
+            if (mesh) {
+                scene.remove(mesh);
+                disposeObject(mesh);
+                mesh = null;
+            }
+            if (measurementGroup) measurementGroup.clear();
+            box = null;
+            center = null;
+            size = null;
+        }
+
         function loadObjModel(url, displayName, options = {}) {
             const loading = document.getElementById('loading');
-            loading.innerHTML = '<div class="spinner"></div><div>加载中...</div>';
-            loading.style.display = 'block';
+            if (options.background) {
+                loading.style.display = 'none';
+            } else {
+                loading.innerHTML = '<div class="spinner"></div><div>加载中...</div>';
+                loading.style.display = 'block';
+            }
             currentModelName = displayName || '未命名模型';
 
-            if (mesh) scene.remove(mesh);
-            measurementGroup.clear();
-            resetMarks();
+            unloadCurrentModel();
+            resetMarks({ silent: true });
 
-            new OBJLoader().load(url, (object) => {
-                mesh = object;
-                mesh.traverse((child) => {
-                    if (child.isMesh) {
-                        child.material = new THREE.MeshPhongMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide, transparent: false, opacity: 1 });
-                        child.geometry.computeVertexNormals();
+            return new Promise((resolve, reject) => {
+                new OBJLoader().load(url, (object) => {
+                    try {
+                        suppressSceneRendering = !!options.background;
+                        mesh = object;
+                        mesh.traverse((child) => {
+                            if (child.isMesh) {
+                                child.material = new THREE.MeshPhongMaterial({ color: 0xaaaaaa, side: THREE.DoubleSide, transparent: false, opacity: 1 });
+                                child.geometry.computeVertexNormals();
+                            }
+                        });
+                        mesh.updateMatrixWorld(true);
+                        if (!options.background) scene.add(mesh);
+
+                        box = new THREE.Box3().setFromObject(mesh);
+                        size = new THREE.Vector3();
+                        box.getSize(size);
+                        center = new THREE.Vector3();
+                        box.getCenter(center);
+
+                        if (!options.background) {
+                            camera.position.set(center.x + size.x * 1.2, center.y + size.y * 0.8, center.z + size.z * 1.2);
+                            controls.target.copy(center);
+                            controls.update();
+                        }
+
+                        if (options.useSavedMarks) loadMarkedPoints();
+                        if (options.restoreLandmarks) restoreMarkedPoints(options.restoreLandmarks);
+                        const hasMarkedPoints = Object.values(markedPoints).some(p => p !== null);
+                        const shouldAutoDetect = options.autoDetect !== false && !hasMarkedPoints;
+                        let detectionMeta = null;
+                        if (shouldAutoDetect) {
+                            detectionMeta = autoDetectPoints({ source: options.source || 'auto' });
+                        } else if (hasMarkedPoints) {
+                            updateMeasurements({ skipSampleSync: true });
+                        }
+                        const snapshot = {
+                            landmarks: serializeMarkedPoints(),
+                            measurements: getMeasurementSnapshot(1),
+                            axes: { ...measurementAxes },
+                            detectedCount: Object.values(markedPoints).filter(Boolean).length
+                        };
+                        suppressSceneRendering = false;
+                        loading.style.display = 'none';
+                        if (options.hideAfterLoad || options.background) {
+                            unloadCurrentModel();
+                            resetMarks({ silent: true });
+                        }
+                        resolve({ mesh, detectionMeta, snapshot });
+                    } catch (error) {
+                        console.error('OBJ process failed', error);
+                        suppressSceneRendering = false;
+                        unloadCurrentModel();
+                        resetMarks({ silent: true });
+                        if (!options.background) loading.innerHTML = '<div style="color:#ff6666;">模型处理失败</div>';
+                        reject(error);
                     }
+                }, (xhr) => {
+                    if (!options.background && xhr.lengthComputable) {
+                        const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
+                        loading.innerHTML = `<div class="spinner"></div><div>加载中 ${percent}%</div>`;
+                    }
+                }, (error) => {
+                    console.error('OBJ load failed', error);
+                    suppressSceneRendering = false;
+                    if (!options.background) loading.innerHTML = '<div style="color:#ff6666;">模型加载失败</div>';
+                    reject(error);
                 });
-                scene.add(mesh);
-
-                box = new THREE.Box3().setFromObject(mesh);
-                size = new THREE.Vector3();
-                box.getSize(size);
-                center = new THREE.Vector3();
-                box.getCenter(center);
-
-                camera.position.set(center.x + size.x * 1.2, center.y + size.y * 0.8, center.z + size.z * 1.2);
-                controls.target.copy(center);
-                controls.update();
-
-                if (options.useSavedMarks) loadMarkedPoints();
-                const hasMarkedPoints = Object.values(markedPoints).some(p => p !== null);
-                if (!hasMarkedPoints) {
-                    autoDetectPoints();
-                }
-                loading.style.display = 'none';
-            }, (xhr) => {
-                if (xhr.lengthComputable) {
-                    const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
-                    loading.innerHTML = `<div class="spinner"></div><div>加载中 ${percent}%</div>`;
-                }
-            }, (error) => {
-                console.error('OBJ load failed', error);
-                loading.innerHTML = '<div style="color:#ff6666;">模型加载失败</div>';
             });
         }
 
@@ -489,6 +706,158 @@
             document.getElementById('status').textContent = `正在检测 ${file.name}`;
             loadObjModel(uploadedModelUrl, file.name, { useSavedMarks: false });
             event.target.value = '';
+        }
+
+        function handleBatchUpload(event) {
+            const files = Array.from(event.target.files || []).filter(file => file.name.toLowerCase().endsWith('.obj'));
+            if (!files.length) {
+                document.getElementById('status').textContent = '请选择 .obj 模型文件';
+                event.target.value = '';
+                return;
+            }
+            const limitedFiles = files.slice(0, 50);
+            batchSamples.forEach(sample => URL.revokeObjectURL(sample.objectUrl));
+            batchSamples = limitedFiles.map(createSample);
+            currentSampleId = null;
+            renderBatchPanel();
+            document.getElementById('status').textContent = `已添加 ${batchSamples.length} 个 OBJ 样本${files.length > 50 ? '，已按最多 50 个截断' : ''}`;
+            event.target.value = '';
+        }
+
+        function updateSampleFromCurrentView(sample, options = {}) {
+            if (!sample || !mesh) return;
+            updateMeasurements({ skipSampleSync: true });
+            sample.landmarks = serializeMarkedPoints();
+            sample.measurements = getMeasurementSnapshot(1);
+            sample.axes = { ...measurementAxes };
+            sample.detectedCount = Object.values(markedPoints).filter(Boolean).length;
+            sample.processed = true;
+            if (options.reviewReasons) sample.reviewReasons = options.reviewReasons;
+            if (options.status) sample.status = options.status;
+            if (options.errorMessage !== undefined) sample.errorMessage = options.errorMessage;
+        }
+
+        function sampleNeedsReview(detectionMeta) {
+            const reasons = [];
+            if (!detectionMeta) reasons.push('未生成检测信息');
+            if (detectionMeta && detectionMeta.detectedCount < Object.keys(pointNames).length) reasons.push('关键点不完整');
+            if (detectionMeta?.eyeFallbackUsed) reasons.push('眼点使用估算');
+            if (detectionMeta?.leftTragionFallback || detectionMeta?.rightTragionFallback) reasons.push('耳屏点使用估算');
+            if ((detectionMeta?.confidence ?? 1) < 0.72) reasons.push('confidence 低');
+            return reasons;
+        }
+
+        async function processSample(sample, index) {
+            sample.status = 'processing';
+            sample.errorMessage = '';
+            sample.reviewReasons = [];
+            currentSampleId = sample.id;
+            renderBatchPanel();
+            document.getElementById('status').textContent = `后台批量测量 ${index + 1}/${batchSamples.length}: ${sample.fileName}`;
+            await waitForFrame();
+            try {
+                const result = await loadObjModel(sample.objectUrl, sample.fileName, {
+                    useSavedMarks: false,
+                    autoDetect: true,
+                    source: 'batch',
+                    background: true
+                });
+                const reviewReasons = sampleNeedsReview(result.detectionMeta);
+                sample.landmarks = result.snapshot?.landmarks || {};
+                sample.measurements = result.snapshot?.measurements || {};
+                sample.axes = result.snapshot?.axes || null;
+                sample.detectedCount = result.snapshot?.detectedCount || 0;
+                sample.processed = true;
+                sample.status = reviewReasons.length ? 'needs_review' : 'complete';
+                sample.reviewReasons = reviewReasons;
+                sample.errorMessage = '';
+            } catch (error) {
+                sample.status = 'failed';
+                sample.errorMessage = error?.message || 'OBJ 加载或检测失败';
+                sample.processed = true;
+            }
+            renderBatchPanel();
+            await waitForFrame();
+        }
+
+        async function startBatchMeasurement() {
+            if (!batchSamples.length) {
+                document.getElementById('status').textContent = '请先批量上传 OBJ 文件';
+                return;
+            }
+            if (isBatchProcessing) return;
+            isBatchProcessing = true;
+            for (let i = 0; i < batchSamples.length; i++) {
+                await processSample(batchSamples[i], i);
+            }
+            isBatchProcessing = false;
+            unloadCurrentModel();
+            resetMarks({ silent: true });
+            currentSampleId = null;
+            renderBatchPanel();
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('status').textContent = '批量测量完成，可点击样本查看或导出 Excel';
+        }
+
+        async function loadSampleForReview(sampleId) {
+            if (isBatchProcessing) {
+                document.getElementById('status').textContent = '批量处理中，请等待当前队列完成';
+                return;
+            }
+            const sample = batchSamples.find(item => item.id === sampleId);
+            if (!sample) return;
+            currentSampleId = sample.id;
+            renderBatchPanel();
+            document.getElementById('status').textContent = `正在加载样本 ${sample.fileName}`;
+            try {
+                await loadObjModel(sample.objectUrl, sample.fileName, {
+                    useSavedMarks: false,
+                    autoDetect: false,
+                    restoreLandmarks: sample.landmarks
+                });
+                updateSampleFromCurrentView(sample, { status: sample.status, errorMessage: sample.errorMessage });
+                document.getElementById('status').textContent = `已加载 ${sample.fileName}，可手动校正点位`;
+            } catch (error) {
+                sample.status = 'failed';
+                sample.errorMessage = error?.message || '样本加载失败';
+                renderBatchPanel();
+            }
+        }
+
+        function handleScaleChange() {
+            updateMeasurements();
+            const sample = getCurrentSample();
+            if (sample && mesh) updateSampleFromCurrentView(sample);
+            renderBatchPanel();
+        }
+
+        function renderBatchPanel() {
+            const total = batchSamples.length;
+            const completed = batchSamples.filter(sample => ['complete', 'needs_review', 'failed'].includes(sample.status)).length;
+            const success = batchSamples.filter(sample => sample.status === 'complete').length;
+            const review = batchSamples.filter(sample => sample.status === 'needs_review').length;
+            const failed = batchSamples.filter(sample => sample.status === 'failed').length;
+            document.getElementById('batchTotal').textContent = total;
+            document.getElementById('batchDone').textContent = completed;
+            document.getElementById('batchSuccess').textContent = success;
+            document.getElementById('batchReview').textContent = review;
+            document.getElementById('batchFailed').textContent = failed;
+
+            const list = document.getElementById('batchList');
+            if (!list) return;
+            list.innerHTML = batchSamples.map(sample => {
+                const status = batchStatusLabels[sample.status] || sample.status;
+                const circumference = sample.measurements?.circumferenceValue ?? '';
+                const active = sample.id === currentSampleId ? ' active' : '';
+                const title = sample.errorMessage || (sample.reviewReasons || []).join('；') || sample.fileName;
+                return `
+                    <div class="sample-row${active}" onclick="loadSampleForReview('${sample.id}')" title="${escapeExcelCell(title)}">
+                        <span class="sample-name">${escapeExcelCell(sample.fileName)}</span>
+                        <span class="sample-status status-${sample.status}">${escapeExcelCell(status)}</span>
+                        <span class="sample-measure">${circumference === '' || circumference === null ? '--' : circumference + ' mm'}</span>
+                    </div>
+                `;
+            }).join('');
         }
 
         function setMarkMode(mode) {
@@ -569,41 +938,97 @@
         }
 
         function onMouseClick(event) {
+            if (markerDragMoved) {
+                markerDragMoved = false;
+                return;
+            }
             if (!currentMarkMode || !mesh) return;
 
-            const rect = renderer.domElement.getBoundingClientRect();
-            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-            raycaster.setFromCamera(mouse, camera);
-            
-            let intersects = [];
-            mesh.traverse((child) => {
-                if (child.isMesh) {
-                    const childIntersects = raycaster.intersectObject(child);
-                    intersects = intersects.concat(childIntersects);
-                }
-            });
+            const intersects = intersectModel(event);
 
             if (intersects.length > 0) {
                 const point = intersects[0].point.clone();
-                placeMarker(currentMarkMode, point);
+                placeMarker(currentMarkMode, point, { manual: true });
                 updateMeasurements();
             }
         }
 
-        function placeMarker(mode, point) {
+        function updateMouseFromEvent(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+        }
+
+        function intersectModel(event) {
+            updateMouseFromEvent(event);
+            let intersects = [];
+            if (!mesh) return intersects;
+            mesh.traverse((child) => {
+                if (child.isMesh) intersects = intersects.concat(raycaster.intersectObject(child));
+            });
+            return intersects;
+        }
+
+        function onPointerDown(event) {
+            if (!editMode || !mesh) return;
+            updateMouseFromEvent(event);
+            const markerObjects = Object.entries(markSpheres)
+                .filter(([, sphere]) => sphere)
+                .map(([mode, sphere]) => {
+                    sphere.userData.markMode = mode;
+                    return sphere;
+                });
+            const markerHits = raycaster.intersectObjects(markerObjects, false);
+            if (!markerHits.length) return;
+            draggingMarkMode = markerHits[0].object.userData.markMode;
+            markerDragMoved = false;
+            controls.enabled = false;
+            renderer.domElement.setPointerCapture?.(event.pointerId);
+        }
+
+        function onPointerMove(event) {
+            if (!draggingMarkMode) return;
+            const modelHits = intersectModel(event);
+            if (!modelHits.length) return;
+            markerDragMoved = true;
+            placeMarker(draggingMarkMode, modelHits[0].point.clone(), { manual: true, silent: true });
+            updateMeasurements();
+        }
+
+        function onPointerUp(event) {
+            if (!draggingMarkMode) return;
+            const finishedMode = draggingMarkMode;
+            draggingMarkMode = null;
+            controls.enabled = true;
+            renderer.domElement.releasePointerCapture?.(event.pointerId);
+            updateMeasurements();
+            document.getElementById('status').textContent = `已调整 ${pointNames[finishedMode]}，当前样本数据已更新`;
+        }
+
+        function placeMarker(mode, point, options = {}) {
             if (markSpheres[mode]) {
                 measurementGroup.remove(markSpheres[mode]);
             }
 
             markedPoints[mode] = point.clone();
+            if (suppressSceneRendering) {
+                if (!options.silent) document.getElementById('status').textContent = `✅ ${pointNames[mode]} 已标记`;
+                return;
+            }
             
             const sphere = createSphere(point, pointColors[mode], size);
             markSpheres[mode] = sphere;
             measurementGroup.add(sphere);
 
-            document.getElementById('status').textContent = `✅ ${pointNames[mode]} 已标记`;
+            if (options.manual) {
+                const sample = getCurrentSample();
+                if (sample) {
+                    sample.manuallyEdited = true;
+                    if (sample.status !== 'failed') sample.status = 'needs_review';
+                }
+            }
+            if (!options.silent) document.getElementById('status').textContent = `✅ ${pointNames[mode]} 已标记`;
         }
 
         function createSphere(pos, color, size) {
@@ -614,7 +1039,7 @@
             return mesh;
         }
 
-        function resetMarks() {
+        function resetMarks(options = {}) {
             Object.keys(markSpheres).forEach(key => {
                 if (markSpheres[key]) {
                     measurementGroup.remove(markSpheres[key]);
@@ -624,7 +1049,7 @@
             });
             currentMarkMode = null;
             document.querySelectorAll('.mark-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById('status').textContent = '标记已重置';
+            if (!options.silent) document.getElementById('status').textContent = '标记已重置';
             
             measurementRows.forEach(item => {
                 const el = document.getElementById(item.id);
@@ -634,10 +1059,20 @@
                 const el = document.getElementById(`${key}Value`);
                 if (el) el.textContent = '--';
             });
+            if (!options.silent) {
+                const sample = getCurrentSample();
+                if (sample) {
+                    sample.landmarks = serializeMarkedPoints();
+                    sample.measurements = getMeasurementSnapshot(1);
+                    sample.manuallyEdited = true;
+                    if (sample.status !== 'failed') sample.status = 'needs_review';
+                    renderBatchPanel();
+                }
+            }
         }
 
-        function autoDetectPoints() {
-            if (!mesh || !box || !center || !size) return;
+        function autoDetectPoints(options = {}) {
+            if (!mesh || !box || !center || !size) return null;
 
             const vertices = [];
             mesh.traverse((child) => {
@@ -1054,7 +1489,7 @@
                 addSidePoints('backSideDebug', 0xff66ff, (p) => relZ(p) < 0.18 && relY(p) > 0.16 && relY(p) < 0.92);
             }
 
-            displaySideDebug();
+            if (!suppressSceneRendering) displaySideDebug();
 
             let headTopLocal = pickLocalPoint(
                 (p) => Math.abs(p.lr - cx) < width * 0.28 && relZ(p) > 0.18,
@@ -1522,7 +1957,7 @@
                 const earRegionSet = new Set(earRegion);
                 const targetFront = earFrontZ + 0.12 * earDepth;
                 const tragionTarget = { lr: targetX, y: targetY, front: targetFront };
-                const point = pickLocalPoint(
+                const pickedPoint = pickLocalPoint(
                     (p) => earRegionSet.has(p) &&
                         Math.abs(p.lr - tragionTarget.lr) <= earWidth * 0.42 &&
                         Math.abs(orientedUp(p) - tragionTarget.y) <= earHeight * 0.40 &&
@@ -1534,11 +1969,12 @@
                         const forwardBonus = clamp((p.front - earFrontZ) / (earDepth * 0.12), 0, 1);
                         return -(dx * 1.1 + dy * 4.5 + dz * 3.2) + forwardBonus * 2.5;
                     }
-                ) || makeLocalPoint(targetX, rawUp(targetY), targetFront);
+                );
+                const point = pickedPoint || makeLocalPoint(targetX, rawUp(targetY), targetFront);
                 return {
                     point,
-                    fallback: true,
-                    reason: 'tragion estimated at half ear height and slightly forward',
+                    fallback: !pickedPoint,
+                    reason: pickedPoint ? 'tragion matched ear-region target' : 'tragion estimated at half ear height and slightly forward',
                     bbox: { sideHeadX, earTopY, earBottomY, earFrontZ, earBackZ, earOuterX, earInnerX, earHeight, earDepth, earWidth, tragionTarget }
                 };
             }
@@ -1581,7 +2017,7 @@
                 if (point) placeMarker(key, point);
             });
 
-            updateMeasurements();
+            updateMeasurements({ skipSampleSync: options.source === 'batch' });
             const count = Object.values(detected).filter(Boolean).length;
             document.getElementById('status').textContent = `自动检测完成，已识别 ${count}/${Object.keys(pointNames).length} 个关键点`;
             window.__headDebug.detected = Object.fromEntries(
@@ -1630,14 +2066,41 @@
                 selectedFaceSide: window.__headDebug.selectedFaceSide
             });
             console.group('Head auto-detect semantic debug');
-            console.log('candidateA faceScore', window.__headDebug.positive.score, window.__headDebug.positive.faceScore);
-            console.log('candidateB faceScore', window.__headDebug.negative.score, window.__headDebug.negative.faceScore);
+            console.log('orientation candidates', window.__headDebug.orientationCandidates || []);
             console.log('selected face side', window.__headDebug.selectedFaceSide, window.__headDebug.axes);
             console.log('landmark constraints', window.__headDebug.landmarkConstraints);
             console.log('landmark constraints json', JSON.stringify(window.__headDebug.landmarkConstraints));
             console.log('detected landmarks json', JSON.stringify(window.__headDebug.detected));
             console.table(window.__headDebug.detected);
             console.groupEnd();
+            const fallbackPenalty =
+                (eyeFallbackUsed ? 0.14 : 0) +
+                (leftTragionResult.fallback ? 0.08 : 0) +
+                (rightTragionResult.fallback ? 0.08 : 0);
+            const completeness = count / Object.keys(pointNames).length;
+            const confidence = Math.max(0, Math.min(1, completeness - fallbackPenalty));
+            const detectionMeta = {
+                detectedCount: count,
+                totalCount: Object.keys(pointNames).length,
+                confidence,
+                eyeFallbackUsed,
+                leftTragionFallback: leftTragionResult.fallback,
+                rightTragionFallback: rightTragionResult.fallback
+            };
+            if (currentSampleId && options.source !== 'batch') {
+                const sample = getCurrentSample();
+                if (sample) {
+                    const reasons = sampleNeedsReview(detectionMeta);
+                    updateSampleFromCurrentView(sample, {
+                        status: reasons.length ? 'needs_review' : 'complete',
+                        reviewReasons: reasons,
+                        errorMessage: ''
+                    });
+                    sample.manuallyEdited = false;
+                    renderBatchPanel();
+                }
+            }
+            return detectionMeta;
         }
 
         function convexHull(points) {
@@ -2066,7 +2529,7 @@
             }
         }
 
-        function updateMeasurements() {
+        function updateMeasurements(options = {}) {
             if (!box || !center || !size || !mesh) return;
             
             let vertices = [];
@@ -2143,7 +2606,7 @@
                     }
                     
                     // 显示截面可视化
-                    displayCircumferenceSection2(markedPoints.eyebrowCenter, markedPoints.occipital, planeNormal, planeY, planeZ, midPoint, sectionVertices, hull);
+                    if (!suppressSceneRendering) displayCircumferenceSection2(markedPoints.eyebrowCenter, markedPoints.occipital, planeNormal, planeY, planeZ, midPoint, sectionVertices, hull);
                 }
             }
 
@@ -2203,7 +2666,7 @@
                 const transverseArc = earToHeadArc * scaleFactor;
                 document.getElementById('transverseArcValue').textContent = transverseArc.toFixed(2) + ' mm';
                 
-                displayArcWithPlane('transverse', markedPoints.leftEar, markedPoints.headTop, markedPoints.rightEar, 0x00ff88);
+                if (!suppressSceneRendering) displayArcWithPlane('transverse', markedPoints.leftEar, markedPoints.headTop, markedPoints.rightEar, 0x00ff88);
             } else {
                 // 移除弧线、截面、采样点、弧线点和直线
                 measurementGroup.children = measurementGroup.children.filter(child => 
@@ -2221,7 +2684,7 @@
                 const longitudinalArc = calculateArcLength(markedPoints.eyebrowCenter, markedPoints.headTop, markedPoints.occipital) * scaleFactor;
                 document.getElementById('longitudinalArcValue').textContent = longitudinalArc.toFixed(2) + ' mm';
                 // 显示头纵维弧线和截面
-                displayArcWithPlane('longitudinal', markedPoints.eyebrowCenter, markedPoints.headTop, markedPoints.occipital, 0xff00ff);
+                if (!suppressSceneRendering) displayArcWithPlane('longitudinal', markedPoints.eyebrowCenter, markedPoints.headTop, markedPoints.occipital, 0xff00ff);
             } else {
                 // 移除弧线、截面、采样点和弧线点
                 measurementGroup.children = measurementGroup.children.filter(child => 
@@ -2230,6 +2693,19 @@
                     child.name !== 'longitudinalSectionPoints' &&
                     child.name !== 'longitudinalArcPoints'
                 );
+            }
+
+            if (!options.skipSampleSync && !isRestoringSample) {
+                const sample = getCurrentSample();
+                if (sample) {
+                    sample.landmarks = serializeMarkedPoints();
+                    sample.measurements = getMeasurementSnapshot(1);
+                    sample.axes = { ...measurementAxes };
+                    sample.detectedCount = Object.values(markedPoints).filter(Boolean).length;
+                    sample.processed = true;
+                    if (sample.status !== 'failed') sample.status = sample.manuallyEdited ? 'needs_review' : sample.status;
+                    renderBatchPanel();
+                }
             }
         }
 
@@ -2250,68 +2726,220 @@
             return rows.map(row => `<tr>${row.map(cell => `<td>${escapeExcelCell(cell)}</td>`).join('')}</tr>`).join('');
         }
 
-        function downloadExcelData() {
-            if (!mesh) {
-                document.getElementById('status').textContent = '请先加载或上传模型';
-                return;
+        function xmlEscape(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&apos;');
+        }
+
+        function excelColumnName(index) {
+            let name = '';
+            let n = index + 1;
+            while (n > 0) {
+                const mod = (n - 1) % 26;
+                name = String.fromCharCode(65 + mod) + name;
+                n = Math.floor((n - mod) / 26);
             }
-            updateMeasurements();
-            const scaleFactor = parseFloat(document.getElementById('scaleFactor').value) || 1;
-            const detectedCount = Object.values(markedPoints).filter(Boolean).length;
-            const measurementTable = [
-                ['项目', '数值', '单位'],
-                ...measurementRows.map(item => {
-                    const text = document.getElementById(item.id)?.textContent || '--';
-                    return [item.label, parseMeasurementValue(text), text.includes('mm') ? 'mm' : ''];
-                })
+            return name;
+        }
+
+        function worksheetXml(rows) {
+            const sheetData = rows.map((row, rowIndex) => {
+                const cells = row.map((value, colIndex) => {
+                    const ref = `${excelColumnName(colIndex)}${rowIndex + 1}`;
+                    if (typeof value === 'number' && Number.isFinite(value)) {
+                        return `<c r="${ref}"><v>${value}</v></c>`;
+                    }
+                    return `<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(value)}</t></is></c>`;
+                }).join('');
+                return `<row r="${rowIndex + 1}">${cells}</row>`;
+            }).join('');
+            return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheetData>${sheetData}</sheetData>
+</worksheet>`;
+        }
+
+        function crc32(bytes) {
+            if (!crc32.table) {
+                crc32.table = Array.from({ length: 256 }, (_, n) => {
+                    let c = n;
+                    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+                    return c >>> 0;
+                });
+            }
+            let crc = 0xffffffff;
+            for (const byte of bytes) crc = crc32.table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+            return (crc ^ 0xffffffff) >>> 0;
+        }
+
+        function uint16(value) {
+            return [value & 0xff, (value >>> 8) & 0xff];
+        }
+
+        function uint32(value) {
+            return [value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff];
+        }
+
+        function createZip(files) {
+            const encoder = new TextEncoder();
+            const chunks = [];
+            const central = [];
+            let offset = 0;
+            files.forEach(file => {
+                const nameBytes = encoder.encode(file.name);
+                const dataBytes = encoder.encode(file.content);
+                const crc = crc32(dataBytes);
+                const localHeader = new Uint8Array([
+                    ...uint32(0x04034b50), ...uint16(20), ...uint16(0), ...uint16(0),
+                    ...uint16(0), ...uint16(0), ...uint32(crc),
+                    ...uint32(dataBytes.length), ...uint32(dataBytes.length),
+                    ...uint16(nameBytes.length), ...uint16(0)
+                ]);
+                chunks.push(localHeader, nameBytes, dataBytes);
+                central.push({ nameBytes, crc, size: dataBytes.length, offset });
+                offset += localHeader.length + nameBytes.length + dataBytes.length;
+            });
+            const centralStart = offset;
+            central.forEach(file => {
+                const header = new Uint8Array([
+                    ...uint32(0x02014b50), ...uint16(20), ...uint16(20), ...uint16(0), ...uint16(0),
+                    ...uint16(0), ...uint16(0), ...uint32(file.crc),
+                    ...uint32(file.size), ...uint32(file.size),
+                    ...uint16(file.nameBytes.length), ...uint16(0), ...uint16(0),
+                    ...uint16(0), ...uint16(0), ...uint32(0), ...uint32(file.offset)
+                ]);
+                chunks.push(header, file.nameBytes);
+                offset += header.length + file.nameBytes.length;
+            });
+            const centralSize = offset - centralStart;
+            chunks.push(new Uint8Array([
+                ...uint32(0x06054b50), ...uint16(0), ...uint16(0),
+                ...uint16(central.length), ...uint16(central.length),
+                ...uint32(centralSize), ...uint32(centralStart), ...uint16(0)
+            ]));
+            return new Blob(chunks, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        }
+
+        function createXlsxBlob(sheets) {
+            const workbookSheets = sheets.map((sheet, index) =>
+                `<sheet name="${xmlEscape(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`
+            ).join('');
+            const workbookRels = sheets.map((sheet, index) =>
+                `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`
+            ).join('');
+            const overrides = sheets.map((sheet, index) =>
+                `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`
+            ).join('');
+            const files = [
+                {
+                    name: '[Content_Types].xml',
+                    content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+${overrides}</Types>`
+                },
+                {
+                    name: '_rels/.rels',
+                    content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`
+                },
+                {
+                    name: 'xl/workbook.xml',
+                    content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets>${workbookSheets}</sheets></workbook>`
+                },
+                {
+                    name: 'xl/_rels/workbook.xml.rels',
+                    content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${workbookRels}</Relationships>`
+                },
+                ...sheets.map((sheet, index) => ({
+                    name: `xl/worksheets/sheet${index + 1}.xml`,
+                    content: worksheetXml(sheet.rows)
+                }))
             ];
-            const landmarkTable = [
-                ['关键点', 'X', 'Y', 'Z', '左右轴', '上下轴', '前后轴'],
-                ...Object.keys(pointNames).map(key => {
-                    const point = markedPoints[key];
-                    return [
-                        pointNames[key],
-                        point ? point.x.toFixed(4) : '',
-                        point ? point.y.toFixed(4) : '',
-                        point ? point.z.toFixed(4) : '',
-                        point ? axisValue(point, 'lr').toFixed(4) : '',
-                        point ? axisValue(point, 'up').toFixed(4) : '',
-                        point ? axisValue(point, 'fb').toFixed(4) : ''
-                    ];
-                })
-            ];
-            const metaTable = [
-                ['模型名称', currentModelName || document.getElementById('modelSelect').value || ''],
-                ['导出时间', new Date().toLocaleString()],
-                ['单位系数', scaleFactor],
-                ['关键点数量', `${detectedCount}/${Object.keys(pointNames).length}`],
-                ['左右轴', measurementAxes.lr],
-                ['上下轴', measurementAxes.up],
-                ['前后轴', `${measurementAxes.fb} * ${measurementAxes.frontSign}`]
-            ];
-            const workbookHtml = `
-                <html>
-                <head><meta charset="UTF-8"></head>
-                <body>
-                    <h2>头模测量数据</h2>
-                    <table border="1">${tableRowsToHtml(metaTable)}</table>
-                    <br>
-                    <table border="1">${tableRowsToHtml(measurementTable)}</table>
-                    <br>
-                    <table border="1">${tableRowsToHtml(landmarkTable)}</table>
-                </body>
-                </html>
-            `;
-            const blob = new Blob(['\ufeff', workbookHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+            return createZip(files);
+        }
+
+        function downloadBlob(blob, fileName) {
             const link = document.createElement('a');
-            const safeName = (currentModelName || 'head-model').replace(/[\\/:*?"<>|]+/g, '_').replace(/\.obj$/i, '');
             link.href = URL.createObjectURL(blob);
-            link.download = `${safeName}-测量数据.xls`;
+            link.download = fileName;
             document.body.appendChild(link);
             link.click();
             URL.revokeObjectURL(link.href);
             link.remove();
-            document.getElementById('status').textContent = 'Excel 数据表格已生成';
+        }
+
+        function buildBatchExportRows(samples) {
+            const measurementHeaders = measurementRows.map(item => item.label);
+            const landmarkHeaders = Object.keys(pointNames).flatMap(key => [
+                `${pointNames[key]} X`,
+                `${pointNames[key]} Y`,
+                `${pointNames[key]} Z`
+            ]);
+            const header = ['文件名', '状态', '复核原因', '错误信息', ...measurementHeaders, ...landmarkHeaders];
+            const rows = samples.map(sample => {
+                const measurements = measurementRows.map(item => sample.measurements?.[item.id] ?? '');
+                const landmarks = Object.keys(pointNames).flatMap(key => {
+                    const point = sample.landmarks?.[key];
+                    return point ? [
+                        Number(point.x.toFixed(4)),
+                        Number(point.y.toFixed(4)),
+                        Number(point.z.toFixed(4))
+                    ] : ['', '', ''];
+                });
+                return [
+                    sample.fileName,
+                    batchStatusLabels[sample.status] || sample.status,
+                    (sample.reviewReasons || []).join('；'),
+                    sample.errorMessage || '',
+                    ...measurements,
+                    ...landmarks
+                ];
+            });
+            return [header, ...rows];
+        }
+
+        function downloadExcelData() {
+            const exportSamples = batchSamples.length
+                ? batchSamples
+                : [{
+                    fileName: currentModelName || document.getElementById('modelSelect').value || 'head-model',
+                    status: mesh ? 'complete' : 'ready',
+                    reviewReasons: [],
+                    errorMessage: '',
+                    measurements: mesh ? (updateMeasurements(), getMeasurementSnapshot(1)) : {},
+                    landmarks: serializeMarkedPoints()
+                }];
+            if (!batchSamples.length && !mesh) {
+                document.getElementById('status').textContent = '请先加载或上传模型';
+                return;
+            }
+            const metaTable = [
+                ['导出时间', new Date().toLocaleString()],
+                ['单位系数', getScaleFactor()],
+                ['样本数量', exportSamples.length],
+                ['成功', exportSamples.filter(sample => sample.status === 'complete').length],
+                ['需复核', exportSamples.filter(sample => sample.status === 'needs_review').length],
+                ['失败', exportSamples.filter(sample => sample.status === 'failed').length]
+            ];
+            const blob = createXlsxBlob([
+                { name: '测量总表', rows: buildBatchExportRows(exportSamples) },
+                { name: '导出信息', rows: metaTable }
+            ]);
+            const fileName = batchSamples.length ? 'batch-head-measurements.xlsx' : `${(currentModelName || 'head-model').replace(/[\\/:*?"<>|]+/g, '_').replace(/\.obj$/i, '')}-measurements.xlsx`;
+            downloadBlob(blob, fileName);
+            document.getElementById('status').textContent = 'Excel xlsx 数据表格已生成';
         }
 
         function displayLine(name, p1, p2, color) {
@@ -2564,6 +3192,10 @@
         init();
         window.loadModel = loadModel;
         window.handleModelUpload = handleModelUpload;
+        window.handleBatchUpload = handleBatchUpload;
+        window.startBatchMeasurement = startBatchMeasurement;
+        window.loadSampleForReview = loadSampleForReview;
+        window.handleScaleChange = handleScaleChange;
         window.downloadExcelData = downloadExcelData;
         window.setMarkMode = setMarkMode;
         window.resetMarks = resetMarks;
