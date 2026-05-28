@@ -102,6 +102,9 @@
             <option value="">加载中...</option>
         </select>
         <button onclick="loadModel()">加载模型</button>
+        <input type="file" id="modelUpload" accept=".obj" style="display:none;" onchange="handleModelUpload(event)">
+        <button onclick="document.getElementById('modelUpload').click()">上传OBJ模型</button>
+        <button onclick="downloadExcelData()">下载Excel</button>
         <input type="number" id="scaleFactor" value="1.0" step="0.1" style="width:80px;padding:8px;border-radius:5px;border:none;background:#4a4a6a;color:white;margin-left:8px;" onchange="updateMeasurements()">
         <label style="color:white;margin-left:4px;font-size:12px;">单位系数</label>
         <button id="editToggle" style="margin-left:8px;padding:8px 16px;border-radius:5px;border:none;background:#e74c3c;color:white;font-weight:bold;">
@@ -131,9 +134,6 @@
         <button class="mark-btn" style="background:#fd79a8;color:white;" id="btnRightEye" onclick="setMarkMode('rightEye')">
             <span class="dot" style="background:#fd79a8;"></span>右瞳孔
         </button>
-        <button class="mark-btn" style="background:#6c5ce7;color:white;" id="btnHairline" onclick="setMarkMode('hairline')">
-            <span class="dot" style="background:#6c5ce7;"></span>发缘点
-        </button>
         <button class="mark-btn" style="background:#00b894;color:white;" id="btnNoseRoot" onclick="setMarkMode('noseRoot')">
             <span class="dot" style="background:#00b894;"></span>鼻根
         </button>
@@ -156,7 +156,7 @@
         
         <div class="section-title">主要尺寸</div>
         <div class="measurement"><span><span class="color-box" style="background:#e74c3c;"></span>头围</span><span id="circumferenceValue">--</span></div>
-        <div class="small-text">眉心到枕后点截面凸包周长</div>
+        <div class="small-text">眉心到枕后点薄截面径向轮廓周长</div>
         
         <div class="measurement"><span><span class="color-box" style="background:#f39c12;"></span>头宽</span><span id="widthValue">--</span></div>
         <div class="small-text">左右耳屏左右轴距离</div>
@@ -222,9 +222,22 @@
         let box, center, size;
         let editMode = false;  // 编辑模式开关
         let measurementAxes = { lr: 'x', up: 'y', fb: 'z', frontSign: -1 };
+        let currentModelName = '';
+        let uploadedModelUrl = null;
         const MARK_STORAGE_VERSION = 'semantic-face-v1';
         const MARK_STORAGE_KEY = `headModelManualSettings:${MARK_STORAGE_VERSION}`;
         const LEGACY_MARK_STORAGE_KEYS = ['headModelMarkedPoints'];
+        const measurementRows = [
+            { id: 'circumferenceValue', label: '头围' },
+            { id: 'widthValue', label: '头宽' },
+            { id: 'lengthValue', label: '头长' },
+            { id: 'heightValue', label: '头高' },
+            { id: 'earHeightValue', label: '头耳高' },
+            { id: 'pupilDistanceValue', label: '瞳距' },
+            { id: 'earNoseDistanceValue', label: '耳鼻距' },
+            { id: 'transverseArcValue', label: '头横维' },
+            { id: 'longitudinalArcValue', label: '头纵维' }
+        ];
 
         function cleanupOldMarkedPointStorage() {
             LEGACY_MARK_STORAGE_KEYS.forEach(key => localStorage.removeItem(key));
@@ -259,7 +272,6 @@
             occipital: 0x3498db,
             leftEye: 0x00cec9,
             rightEye: 0xfd79a8,
-            hairline: 0x6c5ce7,
             noseRoot: 0x00b894,
             noseTip: 0xd63031,
             chin: 0xfdcb6e
@@ -273,7 +285,6 @@
             occipital: '枕后点',
             leftEye: '左瞳孔中心估算点',
             rightEye: '右瞳孔中心估算点',
-            hairline: '发缘点',
             noseRoot: '鼻根',
             noseTip: '鼻尖',
             chin: '颏下点'
@@ -402,13 +413,24 @@
 
         function loadModel() {
             const fileName = document.getElementById('modelSelect').value;
-            document.getElementById('loading').style.display = 'block';
+            if (fileName.startsWith('upload:') && uploadedModelUrl) {
+                loadObjModel(uploadedModelUrl, fileName.replace(/^upload:/, ''), { useSavedMarks: false });
+                return;
+            }
+            loadObjModel(`../models/${fileName}`, fileName, { useSavedMarks: true });
+        }
+
+        function loadObjModel(url, displayName, options = {}) {
+            const loading = document.getElementById('loading');
+            loading.innerHTML = '<div class="spinner"></div><div>加载中...</div>';
+            loading.style.display = 'block';
+            currentModelName = displayName || '未命名模型';
 
             if (mesh) scene.remove(mesh);
             measurementGroup.clear();
             resetMarks();
 
-            new OBJLoader().load(`../models/${fileName}`, (object) => {
+            new OBJLoader().load(url, (object) => {
                 mesh = object;
                 mesh.traverse((child) => {
                     if (child.isMesh) {
@@ -428,20 +450,45 @@
                 controls.target.copy(center);
                 controls.update();
 
-                loadMarkedPoints();
+                if (options.useSavedMarks) loadMarkedPoints();
                 const hasMarkedPoints = Object.values(markedPoints).some(p => p !== null);
                 if (!hasMarkedPoints) {
                     autoDetectPoints();
                 }
-                document.getElementById('loading').style.display = 'none';
+                loading.style.display = 'none';
             }, (xhr) => {
                 if (xhr.lengthComputable) {
                     const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
-                    document.getElementById('loading').innerHTML = `<div class="spinner"></div><div>加载中 ${percent}%</div>`;
+                    loading.innerHTML = `<div class="spinner"></div><div>加载中 ${percent}%</div>`;
                 }
             }, (error) => {
-                document.getElementById('loading').innerHTML = '<div style="color:#ff6666;">加载失败</div>';
+                console.error('OBJ load failed', error);
+                loading.innerHTML = '<div style="color:#ff6666;">模型加载失败</div>';
             });
+        }
+
+        function handleModelUpload(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            if (!file.name.toLowerCase().endsWith('.obj')) {
+                document.getElementById('status').textContent = '请选择 .obj 模型文件';
+                event.target.value = '';
+                return;
+            }
+            if (uploadedModelUrl) URL.revokeObjectURL(uploadedModelUrl);
+            uploadedModelUrl = URL.createObjectURL(file);
+            const modelSelect = document.getElementById('modelSelect');
+            let option = [...modelSelect.options].find(item => item.value === `upload:${file.name}`);
+            if (!option) {
+                option = document.createElement('option');
+                option.value = `upload:${file.name}`;
+                option.textContent = `本地上传：${file.name}`;
+                modelSelect.appendChild(option);
+            }
+            modelSelect.value = option.value;
+            document.getElementById('status').textContent = `正在检测 ${file.name}`;
+            loadObjModel(uploadedModelUrl, file.name, { useSavedMarks: false });
+            event.target.value = '';
         }
 
         function setMarkMode(mode) {
@@ -579,69 +626,14 @@
             document.querySelectorAll('.mark-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById('status').textContent = '标记已重置';
             
+            measurementRows.forEach(item => {
+                const el = document.getElementById(item.id);
+                if (el) el.textContent = '--';
+            });
             Object.keys(pointNames).forEach(key => {
                 const el = document.getElementById(`${key}Value`);
                 if (el) el.textContent = '--';
             });
-        }
-
-        function autoDetectPointsLegacy() {
-            if (!mesh || !box || !center) return;
-
-            let vertices = [];
-            mesh.traverse((child) => {
-                if (child.isMesh && child.geometry) {
-                    const positions = child.geometry.attributes.position;
-                    for (let i = 0; i < positions.count; i++) {
-                        const p = new THREE.Vector3();
-                        p.fromBufferAttribute(positions, i);
-                        child.localToWorld(p);
-                        vertices.push(p);
-                    }
-                }
-            });
-
-            if (vertices.length === 0) return;
-
-            // 使用循环代替展开运算符，避免栈溢出
-            let minY = Infinity, maxY = -Infinity;
-            for (let i = 0; i < vertices.length; i++) {
-                const y = vertices[i].y;
-                if (y < minY) minY = y;
-                if (y > maxY) maxY = y;
-            }
-            const heightRange = maxY - minY;
-
-            const headTopCandidates = vertices.filter(v => v.y > minY + heightRange * 0.8);
-            const headTop = headTopCandidates.length > 0
-                ? headTopCandidates.reduce((max, p) => p.y > max.y ? p : max)
-                : vertices.reduce((max, p) => p.y > max.y ? p : max, vertices[0]);
-
-            const earYMin = minY + heightRange * 0.4;
-            const earYMax = minY + heightRange * 0.65;
-            const earZoneVertices = vertices.filter(v => v.y >= earYMin && v.y <= earYMax);
-            const xRange = box.max.x - box.min.x;
-            const earXThreshold = xRange * 0.25;
-
-            let leftEar = null, rightEar = null;
-            if (earZoneVertices.length > 10) {
-                const leftCandidates = earZoneVertices.filter(v => center.x - v.x > earXThreshold);
-                if (leftCandidates.length > 5) {
-                    leftEar = leftCandidates.reduce((max, p) => p.y > max.y ? p : max);
-                }
-
-                const rightCandidates = earZoneVertices.filter(v => v.x - center.x > earXThreshold);
-                if (rightCandidates.length > 5) {
-                    rightEar = rightCandidates.reduce((max, p) => p.y > max.y ? p : max);
-                }
-            }
-
-            if (headTop) placeMarker('headTop', headTop);
-            if (leftEar) placeMarker('leftEar', leftEar);
-            if (rightEar) placeMarker('rightEar', rightEar);
-
-            updateMeasurements();
-            document.getElementById('status').textContent = '🔍 自动检测完成';
         }
 
         function autoDetectPoints() {
@@ -681,10 +673,9 @@
                 };
                 const sortedAxes = ['x', 'y', 'z'].sort((a, b) => dims[b] - dims[a]);
                 const up = sortedAxes[0];
-                const fb = sortedAxes[1];
-                const lr = sortedAxes[2];
+                const crossAxes = sortedAxes.slice(1);
 
-                function build(sign) {
+                function build(lr, fb, sign) {
                     const local = points.map((p) => ({
                         point: p,
                         lr: p[lr],
@@ -910,28 +901,29 @@
                           Math.max(0, midFaceFront - upperFaceFront) * depth
                         : 0;
                     const score = semantic.score + geometricSupport * 0.05;
-                    return { score, semantic, bounds: b, width, height, depth, local, relL, relU, relF, sign, upperFaceFront, midFaceFront, lowerNeckFront, frontRoughness, backRoughness };
+                    return { score, semantic, bounds: b, width, height, depth, local, relL, relU, relF, lrAxis: lr, fbAxis: fb, sign, upperFaceFront, midFaceFront, lowerNeckFront, frontRoughness, backRoughness };
                 }
 
-                const positive = build(1);
-                const negative = build(-1);
-                const chosen = positive.score > negative.score ? positive : negative;
-                measurementAxes = { lr, up, fb, frontSign: chosen.sign };
+                const candidates = [
+                    build(crossAxes[0], crossAxes[1], 1),
+                    build(crossAxes[0], crossAxes[1], -1),
+                    build(crossAxes[1], crossAxes[0], 1),
+                    build(crossAxes[1], crossAxes[0], -1)
+                ].sort((a, b) => b.score - a.score);
+                const chosen = candidates[0];
+                measurementAxes = { lr: chosen.lrAxis, up, fb: chosen.fbAxis, frontSign: chosen.sign };
                 window.__headDebug = {
                     axes: measurementAxes,
-                    positive: {
-                        score: positive.score,
-                        faceScore: positive.semantic,
-                        frontRoughness: positive.frontRoughness,
-                        backRoughness: positive.backRoughness
-                    },
-                    negative: {
-                        score: negative.score,
-                        faceScore: negative.semantic,
-                        frontRoughness: negative.frontRoughness,
-                        backRoughness: negative.backRoughness
-                    },
-                    selectedFaceSide: chosen === positive ? 'candidateA(+front-back-axis)' : 'candidateB(-front-back-axis)'
+                    orientationCandidates: candidates.map((candidate) => ({
+                        score: candidate.score,
+                        lrAxis: candidate.lrAxis,
+                        fbAxis: candidate.fbAxis,
+                        frontSign: candidate.sign,
+                        faceScore: candidate.semantic,
+                        frontRoughness: candidate.frontRoughness,
+                        backRoughness: candidate.backRoughness
+                    })),
+                    selectedFaceSide: `${chosen.fbAxis}${chosen.sign > 0 ? '+' : '-'}`
                 };
                 return chosen;
             }
@@ -974,24 +966,6 @@
 
             function pick(filter, score) {
                 return worldPoint(pickLocalPoint(filter, score));
-            }
-
-            function targetPoint(targetX, targetY, targetZ, filter = () => true) {
-                return pick(filter, (p) => {
-                    const dx = Math.abs(p.lr - targetX) / width;
-                    const dy = Math.abs(p.up - targetY) / height;
-                    const dz = Math.abs(p.front - targetZ) / depth;
-                    return -(dx * 1.2 + dy * 1.4 + dz);
-                });
-            }
-
-            function surfacePoint(targetX, targetY, targetZ, filter = () => true, weights = { x: 1, y: 1, z: 1 }) {
-                return pick(filter, (p) => {
-                    const dx = Math.abs(p.lr - targetX) / width;
-                    const dy = Math.abs(p.up - targetY) / height;
-                    const dz = Math.abs(p.front - targetZ) / depth;
-                    return -(dx * weights.x + dy * weights.y + dz * weights.z);
-                });
             }
 
             function clamp(value, min, max) {
@@ -1087,16 +1061,16 @@
                 (p) => p.up - Math.abs(p.lr - cx) * 0.25
             );
             let chinLocal = pickLocalPoint(
-                (p) => Math.abs(p.lr - cx) < width * 0.18 && relY(p) > 0.16 && relY(p) < 0.38 && relZ(p) < 0.32,
-                (p) => -p.up - Math.abs(p.lr - cx) * 0.45 - Math.abs(relZ(p) - 0.18) * height * 0.35
+                (p) => Math.abs(p.lr - cx) < width * 0.20 && relY(p) > 0.18 && relY(p) < 0.42 && relZ(p) > 0.42,
+                (p) => p.front * 1.1 - Math.abs(relY(p) - 0.28) * depth * 0.85 - Math.abs(p.lr - cx) * 0.45
             );
             if (!headTopLocal) headTopLocal = makeLocalPoint(cx, bounds.maxY, backZ + depth * 0.45);
             if (!chinLocal) chinLocal = makeLocalPoint(cx, bounds.minY, backZ + depth * 0.40);
             const headTop = worldPoint(headTopLocal);
             const chin = worldPoint(chinLocal);
             const occipital = pick(
-                (p) => Math.abs(p.lr - cx) < width * 0.22 && relY(p) > 0.42 && relY(p) < 0.72 && relZ(p) < 0.28,
-                (p) => -p.front - Math.abs(p.lr - cx) * 0.45 - Math.abs(relY(p) - 0.55) * depth * 0.28
+                (p) => Math.abs(p.lr - cx) < width * 0.20 && relY(p) > 0.55 && relY(p) < 0.76 && relZ(p) < 0.30,
+                (p) => -p.front - Math.abs(p.lr - cx) * 0.45 - Math.abs(relY(p) - 0.62) * depth * 0.45
             );
             const noseTipLocal = pickLocalPoint(
                 (p) => Math.abs(p.lr - cx) < width * 0.12 && relY(p) > 0.40 && relY(p) < 0.53 && relZ(p) > 0.65,
@@ -1475,29 +1449,121 @@
                 browLocal = snapToFaceSurface(faceMidlineX, browTargetY, { xHalf: headWidth * 0.05, yHalf: semanticHeadHeight * 0.025, minRelZ: 0.40 });
             }
             const eyebrowCenter = browLocal.point;
-            const hairline = surfacePoint(
-                cx,
-                bounds.minY + height * 0.76,
-                backZ + depth * 0.72,
-                (p) => Math.abs(p.lr - cx) < width * 0.18 && relY(p) > 0.68 && relY(p) < 0.84 && relZ(p) > 0.38,
-                { x: 1.2, y: 1.7, z: 0.8 }
-            );
 
-            const earZone = (p) => relY(p) > 0.35 && relY(p) < 0.62 && relZ(p) > 0.18 && relZ(p) < 0.66;
-            const leftEar = surfacePoint(
-                bounds.minX + width * 0.15,
-                bounds.minY + height * 0.52,
-                backZ + depth * 0.45,
-                (p) => earZone(p) && relX(p) > 0.06 && relX(p) < 0.30,
-                { x: 1.5, y: 1.4, z: 1.1 }
-            );
-            const rightEar = surfacePoint(
-                bounds.minX + width * 0.85,
-                bounds.minY + height * 0.52,
-                backZ + depth * 0.45,
-                (p) => earZone(p) && relX(p) > 0.70 && relX(p) < 0.94,
-                { x: 1.5, y: 1.4, z: 1.1 }
-            );
+            function nearestEarSurface(target, filter) {
+                return pickLocalPoint(
+                    filter,
+                    (p) => {
+                        const dx = Math.abs(p.lr - target.lr) / headWidth;
+                        const dy = Math.abs(orientedUp(p) - target.y) / semanticHeadHeight;
+                        const dz = Math.abs(p.front - target.front) / depth;
+                        return -(dx * 1.6 + dy * 1.3 + dz * 1.4);
+                    }
+                );
+            }
+
+            function detectTragion(side) {
+                const isLeft = side === 'left';
+                const sideFilter = isLeft
+                    ? (p) => relX(p) > 0.03 && relX(p) < 0.44
+                    : (p) => relX(p) > 0.56 && relX(p) < 0.97;
+                const earRegionMinY = headTopY - 0.70 * semanticHeadHeight;
+                const earRegionMaxY = headTopY - 0.35 * semanticHeadHeight;
+                const sideArea = localVertices.filter((p) => {
+                    const y = orientedUp(p);
+                    return sideFilter(p) &&
+                        y >= earRegionMinY &&
+                        y <= earRegionMaxY &&
+                        relZ(p) > 0.24 &&
+                        relZ(p) < 0.80;
+                });
+
+                if (sideArea.length < 20) {
+                    const fallback = makeLocalPoint(
+                        cx + (isLeft ? -0.36 : 0.36) * headWidth,
+                        rawUp(headTopY - 0.52 * semanticHeadHeight),
+                        backZ + depth * 0.58
+                    );
+                    return { point: fallback, fallback: true, reason: 'empty side region', bbox: null };
+                }
+
+                const sideLrValues = sideArea.map((p) => p.lr);
+                const sideHeadX = sortedQuantile(sideLrValues, isLeft ? 0.22 : 0.78);
+                const outwardDistance = (p) => isLeft ? sideHeadX - p.lr : p.lr - sideHeadX;
+                const isEarProtrusion = (p) => outwardDistance(p) > headWidth * 0.012;
+                let earRegion = sideArea.filter(isEarProtrusion);
+
+                if (earRegion.length < 12) {
+                    const outerCutoff = sortedQuantile(sideLrValues, isLeft ? 0.10 : 0.90);
+                    earRegion = sideArea.filter((p) => isLeft ? p.lr <= outerCutoff : p.lr >= outerCutoff);
+                }
+
+                if (earRegion.length < 12) {
+                    const fallback = makeLocalPoint(
+                        cx + (isLeft ? -0.34 : 0.34) * headWidth,
+                        rawUp(headTopY - 0.54 * semanticHeadHeight),
+                        backZ + depth * 0.58
+                    );
+                    return { point: fallback, fallback: true, reason: 'weak ear protrusion', bbox: { sideHeadX } };
+                }
+
+                const b = componentBounds(earRegion);
+                const earTopY = b.maxY;
+                const earBottomY = b.minY;
+                const earHeight = Math.max(earTopY - earBottomY, semanticHeadHeight * 0.08);
+                const earFrontZ = b.maxF;
+                const earBackZ = b.minF;
+                const earDepth = Math.max(earFrontZ - earBackZ, depth * 0.05);
+                const earOuterX = isLeft ? b.minX : b.maxX;
+                const earInnerX = isLeft ? b.maxX : b.minX;
+                const earWidth = Math.max(Math.abs(earInnerX - earOuterX), headWidth * 0.06);
+                const targetX = earInnerX + (isLeft ? -0.08 : 0.08) * earWidth;
+                const targetY = earBottomY + 0.30 * earHeight;
+                const earRegionSet = new Set(earRegion);
+                const targetFront = earFrontZ + 0.12 * earDepth;
+                const tragionTarget = { lr: targetX, y: targetY, front: targetFront };
+                const point = pickLocalPoint(
+                    (p) => earRegionSet.has(p) &&
+                        Math.abs(p.lr - tragionTarget.lr) <= earWidth * 0.42 &&
+                        Math.abs(orientedUp(p) - tragionTarget.y) <= earHeight * 0.40 &&
+                        Math.abs(p.front - tragionTarget.front) <= earDepth * 0.55,
+                    (p) => {
+                        const dx = Math.abs(p.lr - tragionTarget.lr) / earWidth;
+                        const dy = Math.abs(orientedUp(p) - tragionTarget.y) / earHeight;
+                        const dz = Math.abs(p.front - tragionTarget.front) / earDepth;
+                        const forwardBonus = clamp((p.front - earFrontZ) / (earDepth * 0.12), 0, 1);
+                        return -(dx * 1.1 + dy * 4.5 + dz * 3.2) + forwardBonus * 2.5;
+                    }
+                ) || makeLocalPoint(targetX, rawUp(targetY), targetFront);
+                return {
+                    point,
+                    fallback: true,
+                    reason: 'tragion estimated at half ear height and slightly forward',
+                    bbox: { sideHeadX, earTopY, earBottomY, earFrontZ, earBackZ, earOuterX, earInnerX, earHeight, earDepth, earWidth, tragionTarget }
+                };
+            }
+
+            let leftTragionResult = detectTragion('left');
+            let rightTragionResult = detectTragion('right');
+            if (leftTragionResult.point && rightTragionResult.point) {
+                const yDiff = Math.abs(orientedUp(leftTragionResult.point) - orientedUp(rightTragionResult.point));
+                if (yDiff > semanticHeadHeight * 0.06) {
+                    const averageY = (orientedUp(leftTragionResult.point) + orientedUp(rightTragionResult.point)) / 2;
+                    [leftTragionResult, rightTragionResult].forEach((result, index) => {
+                        const adjusted = nearestEarSurface(
+                            { lr: result.point.lr, y: averageY, front: result.point.front },
+                            (p) => (index === 0 ? relX(p) < 0.42 : relX(p) > 0.58) && relZ(p) > 0.30 && relZ(p) < 0.88
+                        );
+                        if (adjusted) {
+                            result.point = adjusted;
+                            result.fallback = true;
+                            result.reason = 'height balanced tragion estimate';
+                        }
+                    });
+                }
+            }
+            const leftEar = worldPoint(leftTragionResult.point);
+            const rightEar = worldPoint(rightTragionResult.point);
             const detected = {
                 headTop,
                 leftEar,
@@ -1506,7 +1572,6 @@
                 occipital,
                 leftEye,
                 rightEye,
-                hairline,
                 noseRoot: noseRoot || noseTip,
                 noseTip,
                 chin
@@ -1547,6 +1612,10 @@
                     pairFallbackUsed: eyeFallbackUsed,
                     pupilDistanceMm: finalPupilDistanceMm,
                     allowedPupilDistanceMm: [50, 70]
+                },
+                tragionDetection: {
+                    left: { fallback: leftTragionResult.fallback, reason: leftTragionResult.reason, bbox: leftTragionResult.bbox },
+                    right: { fallback: rightTragionResult.fallback, reason: rightTragionResult.reason, bbox: rightTragionResult.bbox }
                 },
                 noseBridgeLine,
                 eyeCenterY,
@@ -1598,6 +1667,75 @@
             upper.pop();
             lower.pop();
             return lower.concat(upper);
+        }
+
+        function sortedQuantile(values, q) {
+            if (!values.length) return 0;
+            const sorted = [...values].sort((a, b) => a - b);
+            const idx = Math.max(0, Math.min(sorted.length - 1, (sorted.length - 1) * q));
+            const lo = Math.floor(idx);
+            const hi = Math.ceil(idx);
+            if (lo === hi) return sorted[lo];
+            return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+        }
+
+        function angleDistance(a, b) {
+            let diff = Math.abs(a - b) % (Math.PI * 2);
+            if (diff > Math.PI) diff = Math.PI * 2 - diff;
+            return diff;
+        }
+
+        function radialContourWithEarScreens(points2D, earPoints2D = []) {
+            if (points2D.length < 12) return points2D;
+
+            const xs = points2D.map((p) => p.x);
+            const ys = points2D.map((p) => p.y);
+            const center = {
+                x: (sortedQuantile(xs, 0.05) + sortedQuantile(xs, 0.95)) / 2,
+                y: (sortedQuantile(ys, 0.05) + sortedQuantile(ys, 0.95)) / 2
+            };
+            const binCount = 144;
+            const bins = Array.from({ length: binCount }, () => []);
+
+            points2D.forEach((point) => {
+                const dx = point.x - center.x;
+                const dy = point.y - center.y;
+                const radius = Math.hypot(dx, dy);
+                if (radius <= 0) return;
+                const angle = Math.atan2(dy, dx);
+                const normalized = angle < 0 ? angle + Math.PI * 2 : angle;
+                const index = Math.min(binCount - 1, Math.floor(normalized / (Math.PI * 2) * binCount));
+                bins[index].push(radius);
+            });
+
+            const earScreens = earPoints2D.map((point) => {
+                const dx = point.x - center.x;
+                const dy = point.y - center.y;
+                const angle = Math.atan2(dy, dx);
+                return {
+                    angle: angle < 0 ? angle + Math.PI * 2 : angle,
+                    radius: Math.hypot(dx, dy)
+                };
+            });
+
+            const contour = [];
+            for (let i = 0; i < binCount; i++) {
+                if (!bins[i].length) continue;
+                const angle = (i + 0.5) / binCount * Math.PI * 2;
+                const outerRadius = sortedQuantile(bins[i], 0.985);
+                const nearestEar = earScreens
+                    .map((ear) => ({ ...ear, distance: angleDistance(angle, ear.angle) }))
+                    .sort((a, b) => a.distance - b.distance)[0];
+                const radius = nearestEar && nearestEar.distance < 0.42
+                    ? Math.min(outerRadius, nearestEar.radius)
+                    : outerRadius;
+                contour.push({
+                    x: center.x + Math.cos(angle) * radius,
+                    y: center.y + Math.sin(angle) * radius
+                });
+            }
+
+            return contour.length > 8 ? contour : convexHull(points2D);
         }
 
         function calculateArcLength(p1, p2, p3) {
@@ -1957,7 +2095,7 @@
                 planeNormal.crossVectors(xAxis, planeNormal).normalize();
                 
                 // 在该平面附近截取截面点（距离平面在 tolerance 范围内）
-                const tolerance = size.x * 0.03;
+                const tolerance = Math.min(size.x, size.y, size.z) * 0.018;
                 const sectionVertices = vertices.filter(v => {
                     const dist = Math.abs(planeNormal.dot(v.clone().sub(markedPoints.eyebrowCenter)));
                     return dist < tolerance;
@@ -1977,15 +2115,19 @@
                     const planeZ = new THREE.Vector3();
                     planeZ.crossVectors(planeNormal, planeY).normalize();
                     
-                    const points2D = sectionVertices.map(p => {
+                    const projectToPlane2D = (p) => {
                         const local = p.clone().sub(midPoint);
                         return {
                             x: planeY.dot(local),  // Y 方向坐标
                             y: planeZ.dot(local)   // Z 方向坐标
                         };
-                    });
+                    };
+                    const points2D = sectionVertices.map(projectToPlane2D);
+                    const earPoints2D = [markedPoints.leftEar, markedPoints.rightEar]
+                        .filter(Boolean)
+                        .map(projectToPlane2D);
                     
-                    const hull = convexHull(points2D);
+                    const hull = radialContourWithEarScreens(points2D, earPoints2D);
                     
                     if (hull.length > 2) {
                         let circumference = 0;
@@ -2089,6 +2231,87 @@
                     child.name !== 'longitudinalArcPoints'
                 );
             }
+        }
+
+        function escapeExcelCell(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function parseMeasurementValue(text) {
+            const match = String(text || '').match(/-?\d+(?:\.\d+)?/);
+            return match ? match[0] : '';
+        }
+
+        function tableRowsToHtml(rows) {
+            return rows.map(row => `<tr>${row.map(cell => `<td>${escapeExcelCell(cell)}</td>`).join('')}</tr>`).join('');
+        }
+
+        function downloadExcelData() {
+            if (!mesh) {
+                document.getElementById('status').textContent = '请先加载或上传模型';
+                return;
+            }
+            updateMeasurements();
+            const scaleFactor = parseFloat(document.getElementById('scaleFactor').value) || 1;
+            const detectedCount = Object.values(markedPoints).filter(Boolean).length;
+            const measurementTable = [
+                ['项目', '数值', '单位'],
+                ...measurementRows.map(item => {
+                    const text = document.getElementById(item.id)?.textContent || '--';
+                    return [item.label, parseMeasurementValue(text), text.includes('mm') ? 'mm' : ''];
+                })
+            ];
+            const landmarkTable = [
+                ['关键点', 'X', 'Y', 'Z', '左右轴', '上下轴', '前后轴'],
+                ...Object.keys(pointNames).map(key => {
+                    const point = markedPoints[key];
+                    return [
+                        pointNames[key],
+                        point ? point.x.toFixed(4) : '',
+                        point ? point.y.toFixed(4) : '',
+                        point ? point.z.toFixed(4) : '',
+                        point ? axisValue(point, 'lr').toFixed(4) : '',
+                        point ? axisValue(point, 'up').toFixed(4) : '',
+                        point ? axisValue(point, 'fb').toFixed(4) : ''
+                    ];
+                })
+            ];
+            const metaTable = [
+                ['模型名称', currentModelName || document.getElementById('modelSelect').value || ''],
+                ['导出时间', new Date().toLocaleString()],
+                ['单位系数', scaleFactor],
+                ['关键点数量', `${detectedCount}/${Object.keys(pointNames).length}`],
+                ['左右轴', measurementAxes.lr],
+                ['上下轴', measurementAxes.up],
+                ['前后轴', `${measurementAxes.fb} * ${measurementAxes.frontSign}`]
+            ];
+            const workbookHtml = `
+                <html>
+                <head><meta charset="UTF-8"></head>
+                <body>
+                    <h2>头模测量数据</h2>
+                    <table border="1">${tableRowsToHtml(metaTable)}</table>
+                    <br>
+                    <table border="1">${tableRowsToHtml(measurementTable)}</table>
+                    <br>
+                    <table border="1">${tableRowsToHtml(landmarkTable)}</table>
+                </body>
+                </html>
+            `;
+            const blob = new Blob(['\ufeff', workbookHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+            const link = document.createElement('a');
+            const safeName = (currentModelName || 'head-model').replace(/[\\/:*?"<>|]+/g, '_').replace(/\.obj$/i, '');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${safeName}-测量数据.xls`;
+            document.body.appendChild(link);
+            link.click();
+            URL.revokeObjectURL(link.href);
+            link.remove();
+            document.getElementById('status').textContent = 'Excel 数据表格已生成';
         }
 
         function displayLine(name, p1, p2, color) {
@@ -2340,6 +2563,8 @@
 
         init();
         window.loadModel = loadModel;
+        window.handleModelUpload = handleModelUpload;
+        window.downloadExcelData = downloadExcelData;
         window.setMarkMode = setMarkMode;
         window.resetMarks = resetMarks;
         window.autoDetectPoints = autoDetectPoints;
