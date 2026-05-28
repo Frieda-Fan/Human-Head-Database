@@ -16,6 +16,10 @@ output/
 *.log
 *.tmp
 *.temp
+*.bak
+*.objbak
+*~
+head-index-module-check.js
 server.err.log
 server.out.log
 
