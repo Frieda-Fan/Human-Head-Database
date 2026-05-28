@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>澶存ā灏哄娴嬮噺绯荤粺</title>
+    <title>头模尺寸测量系统</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Microsoft YaHei', Arial, sans-serif; overflow: hidden; background: #1a1a2e; }
@@ -150,34 +150,34 @@
 </head>
 <body>
     <div id="container"></div>
-    <div id="loading"><div class="spinner"></div><div>鍔犺浇涓?..</div></div>
+    <div id="loading"><div class="spinner"></div><div>加载中...</div></div>
 
     <div id="fileSelect">
         <div class="batch-row">
             <select id="modelSelect">
-                <option value="">鍔犺浇涓?..</option>
+                <option value="">加载中...</option>
             </select>
-            <button onclick="loadModel()">鍔犺浇妯″瀷</button>
+            <button onclick="loadModel()">加载模型</button>
             <input type="file" id="modelUpload" accept=".obj" style="display:none;" onchange="handleModelUpload(event)">
-            <button onclick="document.getElementById('modelUpload').click()">涓婁紶OBJ妯″瀷</button>
+            <button onclick="document.getElementById('modelUpload').click()">上传OBJ模型</button>
             <input type="file" id="batchUpload" accept=".obj" multiple style="display:none;" onchange="handleBatchUpload(event)">
-            <button onclick="document.getElementById('batchUpload').click()">鎵归噺涓婁紶OBJ</button>
-            <button onclick="startBatchMeasurement()">寮€濮嬫壒閲忔祴閲?/button>
-            <button onclick="downloadExcelData()">瀵煎嚭Excel</button>
+            <button onclick="document.getElementById('batchUpload').click()">批量上传OBJ</button>
+            <button onclick="startBatchMeasurement()">开始批量测量</button>
+            <button onclick="downloadExcelData()">导出Excel</button>
         </div>
         <div class="scale-row">
             <input type="number" id="scaleFactor" value="1.0" step="0.1" style="width:100px;padding:8px;border-radius:5px;border:none;background:#4a4a6a;color:white;" onchange="handleScaleChange()">
-            <label style="color:white;font-size:12px;">鍗曚綅绯绘暟</label>
+            <label style="color:white;font-size:12px;">单位系数</label>
             <button id="editToggle" style="padding:8px 16px;border-radius:5px;border:none;background:#e74c3c;color:white;font-weight:bold;">
-                馃敀 閿佸畾鏍囪
+                🔒 锁定标记
             </button>
         </div>
         <div id="batchPanel">
             <div id="batchProgress">
-                <span>澶勭悊杩涘害锛?strong id="batchDone">0</strong> / <strong id="batchTotal">0</strong></span>
-                <span>鎴愬姛锛?strong id="batchSuccess">0</strong></span>
-                <span>闇€澶嶆牳锛?strong id="batchReview">0</strong></span>
-                <span>澶辫触锛?strong id="batchFailed">0</strong></span>
+                <span>处理进度：<strong id="batchDone">0</strong> / <strong id="batchTotal">0</strong></span>
+                <span>成功：<strong id="batchSuccess">0</strong></span>
+                <span>需复核：<strong id="batchReview">0</strong></span>
+                <span>失败：<strong id="batchFailed">0</strong></span>
             </div>
             <div id="batchList"></div>
         </div>
@@ -185,93 +185,93 @@
 
     <div id="markingPanel">
         <button class="mark-btn" style="background:#2ecc71;color:white;" id="btnHeadTop" onclick="setMarkMode('headTop')">
-            <span class="dot" style="background:#2ecc71;"></span>澶撮《
+            <span class="dot" style="background:#2ecc71;"></span>头顶
         </button>
         <button class="mark-btn" style="background:#f39c12;color:white;" id="btnLeftEar" onclick="setMarkMode('leftEar')">
-            <span class="dot" style="background:#f39c12;"></span>宸﹁€冲睆
+            <span class="dot" style="background:#f39c12;"></span>左耳屏
         </button>
         <button class="mark-btn" style="background:#e74c3c;color:white;" id="btnRightEar" onclick="setMarkMode('rightEar')">
-            <span class="dot" style="background:#e74c3c;"></span>鍙宠€冲睆
+            <span class="dot" style="background:#e74c3c;"></span>右耳屏
         </button>
         <button class="mark-btn" style="background:#9b59b6;color:white;" id="btnEyebrowCenter" onclick="setMarkMode('eyebrowCenter')">
-            <span class="dot" style="background:#9b59b6;"></span>鐪夊績
+            <span class="dot" style="background:#9b59b6;"></span>眉心
         </button>
         <button class="mark-btn" style="background:#3498db;color:white;" id="btnOccipital" onclick="setMarkMode('occipital')">
-            <span class="dot" style="background:#3498db;"></span>鏋曞悗鐐?
+            <span class="dot" style="background:#3498db;"></span>枕后点
         </button>
         <button class="mark-btn" style="background:#00cec9;color:white;" id="btnLeftEye" onclick="setMarkMode('leftEye')">
-            <span class="dot" style="background:#00cec9;"></span>宸︾灣瀛?
+            <span class="dot" style="background:#00cec9;"></span>左瞳孔
         </button>
         <button class="mark-btn" style="background:#fd79a8;color:white;" id="btnRightEye" onclick="setMarkMode('rightEye')">
-            <span class="dot" style="background:#fd79a8;"></span>鍙崇灣瀛?
+            <span class="dot" style="background:#fd79a8;"></span>右瞳孔
         </button>
         <button class="mark-btn" style="background:#00b894;color:white;" id="btnNoseRoot" onclick="setMarkMode('noseRoot')">
-            <span class="dot" style="background:#00b894;"></span>榧绘牴
+            <span class="dot" style="background:#00b894;"></span>鼻根
         </button>
         <button class="mark-btn" style="background:#d63031;color:white;" id="btnNoseTip" onclick="setMarkMode('noseTip')">
-            <span class="dot" style="background:#d63031;"></span>榧诲皷
+            <span class="dot" style="background:#d63031;"></span>鼻尖
         </button>
         <button class="mark-btn" style="background:#fdcb6e;color:#333;" id="btnChin" onclick="setMarkMode('chin')">
-            <span class="dot" style="background:#fdcb6e;"></span>棰忎笅鐐?
+            <span class="dot" style="background:#fdcb6e;"></span>颏下点
         </button>
         <button class="mark-btn" style="background:#3498db;color:white;" onclick="autoDetectPoints()">
-            馃攳 鑷姩妫€娴?
+            🔍 自动检测
         </button>
         <button class="mark-btn" style="background:#7f8c8d;color:white;" onclick="resetMarks()">
-            馃棏锔?閲嶇疆
+            🗑️ 重置
         </button>
     </div>
 
     <div id="info">
-        <h3>馃搻 澶存ā灏哄娴嬮噺</h3>
+        <h3>📐 头模尺寸测量</h3>
 
-        <div class="section-title">涓昏灏哄</div>
-        <div class="measurement"><span><span class="color-box" style="background:#e74c3c;"></span>澶村洿</span><span id="circumferenceValue">--</span></div>
-        <div class="small-text">鐪夊績鍒版灂鍚庣偣钖勬埅闈㈠緞鍚戣疆寤撳懆闀?/div>
+        <div class="section-title">主要尺寸</div>
+        <div class="measurement"><span><span class="color-box" style="background:#e74c3c;"></span>头围</span><span id="circumferenceValue">--</span></div>
+        <div class="small-text">眉心到枕后点薄截面径向轮廓周长</div>
 
-        <div class="measurement"><span><span class="color-box" style="background:#f39c12;"></span>澶村</span><span id="widthValue">--</span></div>
-        <div class="small-text">宸﹀彸鑰冲睆宸﹀彸杞磋窛绂?/div>
+        <div class="measurement"><span><span class="color-box" style="background:#f39c12;"></span>头宽</span><span id="widthValue">--</span></div>
+        <div class="small-text">左右耳屏左右轴距离</div>
 
-        <div class="measurement"><span><span class="color-box" style="background:#3498db;"></span>澶撮暱</span><span id="lengthValue">--</span></div>
-        <div class="small-text">榧诲皷鍒版灂鍚庣偣鍓嶅悗杞磋窛绂?/div>
+        <div class="measurement"><span><span class="color-box" style="background:#3498db;"></span>头长</span><span id="lengthValue">--</span></div>
+        <div class="small-text">鼻尖到枕后点前后轴距离</div>
 
-        <div class="measurement"><span><span class="color-box" style="background:#2ecc71;"></span>澶撮珮</span><span id="heightValue">--</span></div>
-        <div class="small-text">澶撮《鐐瑰埌棰忎笅鐐?Y 杞磋窛绂?/div>
+        <div class="measurement"><span><span class="color-box" style="background:#2ecc71;"></span>头高</span><span id="heightValue">--</span></div>
+        <div class="small-text">头顶点到颏下点 Y 轴距离</div>
 
-        <div class="measurement"><span><span class="color-box" style="background:#9b59b6;"></span>澶磋€抽珮</span><span id="earHeightValue">--</span></div>
-        <div class="small-text">澶撮《鐐瑰埌鍙岃€冲睆涓婁笅杞磋窛绂?/div>
+        <div class="measurement"><span><span class="color-box" style="background:#9b59b6;"></span>头耳高</span><span id="earHeightValue">--</span></div>
+        <div class="small-text">头顶点到双耳屏上下轴距离</div>
 
-        <div class="section-title">闈㈤儴鐗瑰緛</div>
-        <div class="measurement"><span><span class="color-box" style="background:#00cec9;"></span>鐬宠窛</span><span id="pupilDistanceValue">--</span></div>
-        <div class="small-text">宸﹀彸鐬冲瓟涓績浼扮畻鐐逛笁缁磋窛绂?/div>
+        <div class="section-title">面部特征</div>
+        <div class="measurement"><span><span class="color-box" style="background:#00cec9;"></span>瞳距</span><span id="pupilDistanceValue">--</span></div>
+        <div class="small-text">左右瞳孔中心估算点三维距离</div>
 
-        <div class="measurement"><span><span class="color-box" style="background:#00b894;"></span>鑰抽蓟璺?/span><span id="earNoseDistanceValue">--</span></div>
-        <div class="small-text">榧绘牴鍒拌€冲睆鍓嶅悗杞磋窛绂?/div>
+        <div class="measurement"><span><span class="color-box" style="background:#00b894;"></span>耳鼻距</span><span id="earNoseDistanceValue">--</span></div>
+        <div class="small-text">鼻根到耳屏前后轴距离</div>
 
-        <div class="section-title">寮ч暱娴嬮噺</div>
-        <div class="measurement"><span><span class="color-box" style="background:#00ff88;"></span>澶存í缁?/span><span id="transverseArcValue">--</span></div>
-        <div class="small-text">宸﹁€冲睆 - 澶撮《 - 鍙宠€冲睆寮ч暱</div>
+        <div class="section-title">弧长测量</div>
+        <div class="measurement"><span><span class="color-box" style="background:#00ff88;"></span>头横维</span><span id="transverseArcValue">--</span></div>
+        <div class="small-text">左耳屏 - 头顶 - 右耳屏弧长</div>
 
-        <div class="measurement"><span><span class="color-box" style="background:#ff00ff;"></span>澶寸旱缁?/span><span id="longitudinalArcValue">--</span></div>
-        <div class="small-text">鐪夊績 - 澶撮《 - 鏋曞悗鐐瑰姬闀?/div>
+        <div class="measurement"><span><span class="color-box" style="background:#ff00ff;"></span>头纵维</span><span id="longitudinalArcValue">--</span></div>
+        <div class="small-text">眉心 - 头顶 - 枕后点弧长</div>
 
         <div style="margin-top:12px;padding-top:10px;border-top:1px solid #444;">
             <div style="font-size:10px;color:#888;">
-                <span style="color:#ff4444;">X</span>鍓?|
-                <span style="color:#44ff44;">Y</span>涓?|
-                <span style="color:#4444ff;">Z</span>鍙?
+                <span style="color:#ff4444;">X</span>前 |
+                <span style="color:#44ff44;">Y</span>上 |
+                <span style="color:#4444ff;">Z</span>右
             </div>
         </div>
     </div>
 
     <div id="controls">
-        <h4>馃幃 鎿嶄綔璇存槑</h4>
-        <p>宸﹂敭鎷栧姩 - 鏃嬭浆瑙嗚</p>
-        <p>鍙抽敭鎷栧姩 - 骞崇Щ瑙嗚</p>
-        <p>婊氳疆 - 缂╂斁</p>
+        <h4>🎮 操作说明</h4>
+        <p>左键拖动 - 旋转视角</p>
+        <p>右键拖动 - 平移视角</p>
+        <p>滚轮 - 缩放</p>
     </div>
 
-    <div id="status">閫夋嫨鏍囪妯″紡鍚庣偣鍑绘ā鍨嬭〃闈㈡爣璁?/div>
+    <div id="status">选择标记模式后点击模型表面标记</div>
 
     <script type="importmap">
     {
@@ -291,7 +291,7 @@
         let mesh, measurementGroup, raycaster, mouse;
         let currentMarkMode = null;
         let box, center, size;
-        let editMode = false;  // 缂栬緫妯″紡寮€鍏?
+        let editMode = false;  // 编辑模式开关
         let measurementAxes = { lr: 'x', up: 'y', fb: 'z', frontSign: -1 };
         let currentModelName = '';
         let uploadedModelUrl = null;
@@ -307,22 +307,22 @@
         const MARK_STORAGE_KEY = `headModelManualSettings:${MARK_STORAGE_VERSION}`;
         const LEGACY_MARK_STORAGE_KEYS = ['headModelMarkedPoints'];
         const measurementRows = [
-            { id: 'circumferenceValue', label: '澶村洿' },
-            { id: 'widthValue', label: '澶村' },
-            { id: 'lengthValue', label: '澶撮暱' },
-            { id: 'heightValue', label: '澶撮珮' },
-            { id: 'earHeightValue', label: '澶磋€抽珮' },
-            { id: 'pupilDistanceValue', label: '鐬宠窛' },
-            { id: 'earNoseDistanceValue', label: '鑰抽蓟璺? },
-            { id: 'transverseArcValue', label: '澶存í缁? },
-            { id: 'longitudinalArcValue', label: '澶寸旱缁? }
+            { id: 'circumferenceValue', label: '头围' },
+            { id: 'widthValue', label: '头宽' },
+            { id: 'lengthValue', label: '头长' },
+            { id: 'heightValue', label: '头高' },
+            { id: 'earHeightValue', label: '头耳高' },
+            { id: 'pupilDistanceValue', label: '瞳距' },
+            { id: 'earNoseDistanceValue', label: '耳鼻距' },
+            { id: 'transverseArcValue', label: '头横维' },
+            { id: 'longitudinalArcValue', label: '头纵维' }
         ];
         const batchStatusLabels = {
-            ready: '寰呭鐞?,
-            processing: '澶勭悊涓?,
-            complete: '瀹屾垚',
-            needs_review: '闇€澶嶆牳',
-            failed: '澶辫触'
+            ready: '待处理',
+            processing: '处理中',
+            complete: '完成',
+            needs_review: '需复核',
+            failed: '失败'
         };
 
         function getScaleFactor() {
@@ -426,16 +426,16 @@
         };
 
         const pointNames = {
-            headTop: '澶撮《',
-            leftEar: '宸﹁€冲睆',
-            rightEar: '鍙宠€冲睆',
-            eyebrowCenter: '鐪夊績',
-            occipital: '鏋曞悗鐐?,
-            leftEye: '宸︾灣瀛斾腑蹇冧及绠楃偣',
-            rightEye: '鍙崇灣瀛斾腑蹇冧及绠楃偣',
-            noseRoot: '榧绘牴',
-            noseTip: '榧诲皷',
-            chin: '棰忎笅鐐?
+            headTop: '头顶',
+            leftEar: '左耳屏',
+            rightEar: '右耳屏',
+            eyebrowCenter: '眉心',
+            occipital: '枕后点',
+            leftEye: '左瞳孔中心估算点',
+            rightEye: '右瞳孔中心估算点',
+            noseRoot: '鼻根',
+            noseTip: '鼻尖',
+            chin: '颏下点'
         };
 
         let markedPoints = {};
@@ -483,7 +483,7 @@
             renderer.domElement.addEventListener('pointerup', onPointerUp);
             renderer.domElement.addEventListener('pointerleave', onPointerUp);
 
-            // 缁戝畾缂栬緫妯″紡鍒囨崲鎸夐挳浜嬩欢
+            // 绑定编辑模式切换按钮事件
             const editToggleBtn = document.getElementById('editToggle');
             if (editToggleBtn) {
                 editToggleBtn.addEventListener('click', toggleEditMode);
@@ -495,7 +495,7 @@
                 renderer.setSize(window.innerWidth, window.innerHeight);
             });
 
-            // 鍔ㄦ€佸姞杞芥ā鍨嬪垪琛?
+            // 动态加载模型列表
             loadModelList();
 
             animate();
@@ -538,7 +538,7 @@
         async function loadModelList() {
             const modelSelect = document.getElementById('modelSelect');
 
-            // 宸茬煡鐨勬ā鍨嬫枃浠跺垪琛紙鏍规嵁models鏂囦欢澶逛腑鐨勫疄闄呮枃浠讹級
+            // 已知的模型文件列表（根据models文件夹中的实际文件）
             const knownModels = [
                 '1.obj',
                 'head.obj',
@@ -546,10 +546,10 @@
                 'male base.obj'
             ];
 
-            // 娓呯┖鐜版湁閫夐」
+            // 清空现有选项
             modelSelect.innerHTML = '';
 
-            // 娣诲姞宸茬煡妯″瀷
+            // 添加已知模型
             knownModels.forEach(model => {
                 const option = document.createElement('option');
                 option.value = model;
@@ -557,9 +557,9 @@
                 modelSelect.appendChild(option);
             });
 
-            // 榛樿閫夋嫨绗竴涓ā鍨?
+            // 默认选择第一个模型
             modelSelect.selectedIndex = 0;
-            // 鑷姩鍔犺浇绗竴涓ā鍨?
+            // 自动加载第一个模型
             loadModel();
         }
 
@@ -641,10 +641,10 @@
             if (options.background) {
                 loading.style.display = 'none';
             } else {
-                loading.innerHTML = '<div class="spinner"></div><div>鍔犺浇涓?..</div>';
+                loading.innerHTML = '<div class="spinner"></div><div>加载中...</div>';
                 loading.style.display = 'block';
             }
-            currentModelName = displayName || '鏈懡鍚嶆ā鍨?;
+            currentModelName = displayName || '未命名模型';
 
             unloadCurrentModel();
             resetMarks({ silent: true });
@@ -708,18 +708,18 @@
                         suppressSceneRendering = false;
                         unloadCurrentModel();
                         resetMarks({ silent: true });
-                        if (!options.background) loading.innerHTML = '<div style="color:#ff6666;">妯″瀷澶勭悊澶辫触</div>';
+                        if (!options.background) loading.innerHTML = '<div style="color:#ff6666;">模型处理失败</div>';
                         reject(error);
                     }
                 }, (xhr) => {
                     if (!options.background && xhr.lengthComputable) {
                         const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
-                        loading.innerHTML = `<div class="spinner"></div><div>鍔犺浇涓?${percent}%</div>`;
+                        loading.innerHTML = `<div class="spinner"></div><div>加载中 ${percent}%</div>`;
                     }
                 }, (error) => {
                     console.error('OBJ load failed', error);
                     suppressSceneRendering = false;
-                    if (!options.background) loading.innerHTML = '<div style="color:#ff6666;">妯″瀷鍔犺浇澶辫触</div>';
+                    if (!options.background) loading.innerHTML = '<div style="color:#ff6666;">模型加载失败</div>';
                     reject(error);
                 });
             });
@@ -729,7 +729,7 @@
             const file = event.target.files && event.target.files[0];
             if (!file) return;
             if (!file.name.toLowerCase().endsWith('.obj')) {
-                document.getElementById('status').textContent = '璇烽€夋嫨 .obj 妯″瀷鏂囦欢';
+                document.getElementById('status').textContent = '请选择 .obj 模型文件';
                 event.target.value = '';
                 return;
             }
@@ -740,11 +740,11 @@
             if (!option) {
                 option = document.createElement('option');
                 option.value = `upload:${file.name}`;
-                option.textContent = `鏈湴涓婁紶锛?{file.name}`;
+                option.textContent = `本地上传：${file.name}`;
                 modelSelect.appendChild(option);
             }
             modelSelect.value = option.value;
-            document.getElementById('status').textContent = `姝ｅ湪妫€娴?${file.name}`;
+            document.getElementById('status').textContent = `正在检测 ${file.name}`;
             loadObjModel(uploadedModelUrl, file.name, { useSavedMarks: false });
             event.target.value = '';
         }
@@ -752,7 +752,7 @@
         function handleBatchUpload(event) {
             const files = Array.from(event.target.files || []).filter(file => file.name.toLowerCase().endsWith('.obj'));
             if (!files.length) {
-                document.getElementById('status').textContent = '璇烽€夋嫨 .obj 妯″瀷鏂囦欢';
+                document.getElementById('status').textContent = '请选择 .obj 模型文件';
                 event.target.value = '';
                 return;
             }
@@ -761,7 +761,7 @@
             batchSamples = limitedFiles.map(createSample);
             currentSampleId = null;
             renderBatchPanel();
-            document.getElementById('status').textContent = `宸叉坊鍔?${batchSamples.length} 涓?OBJ 鏍锋湰${files.length > 50 ? '锛屽凡鎸夋渶澶?50 涓埅鏂? : ''}`;
+            document.getElementById('status').textContent = `已添加 ${batchSamples.length} 个 OBJ 样本${files.length > 50 ? '，已按最多 50 个截断' : ''}`;
             event.target.value = '';
         }
 
@@ -780,11 +780,11 @@
 
         function sampleNeedsReview(detectionMeta) {
             const reasons = [];
-            if (!detectionMeta) reasons.push('鏈敓鎴愭娴嬩俊鎭?);
-            if (detectionMeta && detectionMeta.detectedCount < Object.keys(pointNames).length) reasons.push('鍏抽敭鐐逛笉瀹屾暣');
-            if (detectionMeta?.eyeFallbackUsed) reasons.push('鐪肩偣浣跨敤浼扮畻');
-            if (detectionMeta?.leftTragionFallback || detectionMeta?.rightTragionFallback) reasons.push('鑰冲睆鐐逛娇鐢ㄤ及绠?);
-            if ((detectionMeta?.confidence ?? 1) < 0.72) reasons.push('confidence 浣?);
+            if (!detectionMeta) reasons.push('未生成检测信息');
+            if (detectionMeta && detectionMeta.detectedCount < Object.keys(pointNames).length) reasons.push('关键点不完整');
+            if (detectionMeta?.eyeFallbackUsed) reasons.push('眼点使用估算');
+            if (detectionMeta?.leftTragionFallback || detectionMeta?.rightTragionFallback) reasons.push('耳屏点使用估算');
+            if ((detectionMeta?.confidence ?? 1) < 0.72) reasons.push('confidence 低');
             return reasons;
         }
 
@@ -794,7 +794,7 @@
             sample.reviewReasons = [];
             currentSampleId = sample.id;
             renderBatchPanel();
-            document.getElementById('status').textContent = `鍚庡彴鎵归噺娴嬮噺 ${index + 1}/${batchSamples.length}: ${sample.fileName}`;
+            document.getElementById('status').textContent = `后台批量测量 ${index + 1}/${batchSamples.length}: ${sample.fileName}`;
             await waitForFrame();
             try {
                 const result = await loadObjModel(sample.objectUrl, sample.fileName, {
@@ -814,7 +814,7 @@
                 sample.errorMessage = '';
             } catch (error) {
                 sample.status = 'failed';
-                sample.errorMessage = error?.message || 'OBJ 鍔犺浇鎴栨娴嬪け璐?;
+                sample.errorMessage = error?.message || 'OBJ 加载或检测失败';
                 sample.processed = true;
             }
             renderBatchPanel();
@@ -823,7 +823,7 @@
 
         async function startBatchMeasurement() {
             if (!batchSamples.length) {
-                document.getElementById('status').textContent = '璇峰厛鎵归噺涓婁紶 OBJ 鏂囦欢';
+                document.getElementById('status').textContent = '请先批量上传 OBJ 文件';
                 return;
             }
             if (isBatchProcessing) return;
@@ -837,19 +837,19 @@
             currentSampleId = null;
             renderBatchPanel();
             document.getElementById('loading').style.display = 'none';
-            document.getElementById('status').textContent = '鎵归噺娴嬮噺瀹屾垚锛屽彲鐐瑰嚮鏍锋湰鏌ョ湅鎴栧鍑?Excel';
+            document.getElementById('status').textContent = '批量测量完成，可点击样本查看或导出 Excel';
         }
 
         async function loadSampleForReview(sampleId) {
             if (isBatchProcessing) {
-                document.getElementById('status').textContent = '鎵归噺澶勭悊涓紝璇风瓑寰呭綋鍓嶉槦鍒楀畬鎴?;
+                document.getElementById('status').textContent = '批量处理中，请等待当前队列完成';
                 return;
             }
             const sample = batchSamples.find(item => item.id === sampleId);
             if (!sample) return;
             currentSampleId = sample.id;
             renderBatchPanel();
-            document.getElementById('status').textContent = `姝ｅ湪鍔犺浇鏍锋湰 ${sample.fileName}`;
+            document.getElementById('status').textContent = `正在加载样本 ${sample.fileName}`;
             try {
                 await loadObjModel(sample.objectUrl, sample.fileName, {
                     useSavedMarks: false,
@@ -857,10 +857,10 @@
                     restoreLandmarks: sample.landmarks
                 });
                 updateSampleFromCurrentView(sample, { status: sample.status, errorMessage: sample.errorMessage });
-                document.getElementById('status').textContent = `宸插姞杞?${sample.fileName}锛屽彲鎵嬪姩鏍℃鐐逛綅`;
+                document.getElementById('status').textContent = `已加载 ${sample.fileName}，可手动校正点位`;
             } catch (error) {
                 sample.status = 'failed';
-                sample.errorMessage = error?.message || '鏍锋湰鍔犺浇澶辫触';
+                sample.errorMessage = error?.message || '样本加载失败';
                 renderBatchPanel();
             }
         }
@@ -890,7 +890,7 @@
                 const status = batchStatusLabels[sample.status] || sample.status;
                 const circumference = sample.measurements?.circumferenceValue ?? '';
                 const active = sample.id === currentSampleId ? ' active' : '';
-                const title = sample.errorMessage || (sample.reviewReasons || []).join('锛?) || sample.fileName;
+                const title = sample.errorMessage || (sample.reviewReasons || []).join('；') || sample.fileName;
                 return `
                     <div class="sample-row${active}" onclick="loadSampleForReview('${sample.id}')" title="${escapeExcelCell(title)}">
                         <span class="sample-name">${escapeExcelCell(sample.fileName)}</span>
@@ -903,7 +903,7 @@
 
         function setMarkMode(mode) {
             if (!editMode) {
-                document.getElementById('status').textContent = '鈿狅笍 璇峰厛寮€鍚紪杈戞ā寮?;
+                document.getElementById('status').textContent = '⚠️ 请先开启编辑模式';
                 return;
             }
 
@@ -913,9 +913,9 @@
 
             if (currentMarkMode) {
                 document.getElementById(`btn${mode.charAt(0).toUpperCase() + mode.slice(1)}`).classList.add('active');
-                document.getElementById('status').textContent = `馃幆 鏍囪妯″紡锛?{pointNames[mode]} - 鐐瑰嚮妯″瀷琛ㄩ潰鏍囪`;
+                document.getElementById('status').textContent = `🎯 标记模式：${pointNames[mode]} - 点击模型表面标记`;
             } else {
-                document.getElementById('status').textContent = '閫夋嫨鏍囪妯″紡鍚庣偣鍑绘ā鍨嬭〃闈㈡爣璁?;
+                document.getElementById('status').textContent = '选择标记模式后点击模型表面标记';
             }
         }
 
@@ -925,19 +925,19 @@
             const markingPanel = document.getElementById('markingPanel');
 
             if (editMode) {
-                btn.textContent = '馃敁 缂栬緫妯″紡';
+                btn.textContent = '🔓 编辑模式';
                 btn.style.background = '#2ecc71';
                 markingPanel.style.opacity = '1';
                 markingPanel.style.pointerEvents = 'auto';
-                document.getElementById('status').textContent = '鉁忥笍 缂栬緫妯″紡宸插紑鍚?- 閫夋嫨鏍囪鐐瑰悗鐐瑰嚮妯″瀷琛ㄩ潰';
+                document.getElementById('status').textContent = '✏️ 编辑模式已开启 - 选择标记点后点击模型表面';
             } else {
-                btn.textContent = '馃敀 閿佸畾鏍囪';
+                btn.textContent = '🔒 锁定标记';
                 btn.style.background = '#e74c3c';
                 markingPanel.style.opacity = '0.5';
                 markingPanel.style.pointerEvents = 'auto';
                 currentMarkMode = null;
                 document.querySelectorAll('.mark-btn').forEach(btn => btn.classList.remove('active'));
-                document.getElementById('status').textContent = '馃敀 鏍囪宸查攣瀹?;
+                document.getElementById('status').textContent = '🔒 标记已锁定';
                 saveMarkedPoints();
             }
         }
@@ -967,12 +967,12 @@
                             }
                         });
                         updateMeasurements();
-                        document.getElementById('status').textContent = '馃摜 宸插姞杞戒繚瀛樼殑鏍囪鐐?;
+                        document.getElementById('status').textContent = '📥 已加载保存的标记点';
                     } else if (data.model === fileName) {
                         localStorage.removeItem(MARK_STORAGE_KEY);
                     }
                 } catch (e) {
-                    console.error('鍔犺浇鏍囪鐐瑰け璐?', e);
+                    console.error('加载标记点失败:', e);
                     localStorage.removeItem(MARK_STORAGE_KEY);
                 }
             }
@@ -1044,7 +1044,7 @@
             controls.enabled = true;
             renderer.domElement.releasePointerCapture?.(event.pointerId);
             updateMeasurements();
-            document.getElementById('status').textContent = `宸茶皟鏁?${pointNames[finishedMode]}锛屽綋鍓嶆牱鏈暟鎹凡鏇存柊`;
+            document.getElementById('status').textContent = `已调整 ${pointNames[finishedMode]}，当前样本数据已更新`;
         }
 
         function placeMarker(mode, point, options = {}) {
@@ -1054,7 +1054,7 @@
 
             markedPoints[mode] = point.clone();
             if (suppressSceneRendering) {
-                if (!options.silent) document.getElementById('status').textContent = `鉁?${pointNames[mode]} 宸叉爣璁癭;
+                if (!options.silent) document.getElementById('status').textContent = `✅ ${pointNames[mode]} 已标记`;
                 return;
             }
 
@@ -1069,7 +1069,7 @@
                     if (sample.status !== 'failed') sample.status = 'needs_review';
                 }
             }
-            if (!options.silent) document.getElementById('status').textContent = `鉁?${pointNames[mode]} 宸叉爣璁癭;
+            if (!options.silent) document.getElementById('status').textContent = `✅ ${pointNames[mode]} 已标记`;
         }
 
         function createSphere(pos, color, size) {
@@ -1090,7 +1090,7 @@
             });
             currentMarkMode = null;
             document.querySelectorAll('.mark-btn').forEach(btn => btn.classList.remove('active'));
-            if (!options.silent) document.getElementById('status').textContent = '鏍囪宸查噸缃?;
+            if (!options.silent) document.getElementById('status').textContent = '标记已重置';
 
             measurementRows.forEach(item => {
                 const el = document.getElementById(item.id);
@@ -2148,7 +2148,7 @@
 
             updateMeasurements({ skipSampleSync: options.source === 'batch' });
             const count = Object.values(detected).filter(Boolean).length;
-            document.getElementById('status').textContent = `鑷姩妫€娴嬪畬鎴愶紝宸茶瘑鍒?${count}/${Object.keys(pointNames).length} 涓叧閿偣`;
+            document.getElementById('status').textContent = `自动检测完成，已识别 ${count}/${Object.keys(pointNames).length} 个关键点`;
             window.__headDebug.detected = Object.fromEntries(
                 Object.entries(detected).map(([key, point]) => [key, point ? {
                     lr: axisValue(point, 'lr'),
@@ -2332,15 +2332,15 @@
         }
 
         function calculateArcLength(p1, p2, p3) {
-            // 璁＄畻涓夌偣纭畾鐨勫钩闈?
+            // 计算三点确定的平面
             const v1 = new THREE.Vector3().subVectors(p2, p1);
             const v2 = new THREE.Vector3().subVectors(p3, p1);
             const planeNormal = new THREE.Vector3().crossVectors(v1, v2).normalize();
 
-            // 璁＄畻骞抽潰涓績鐐?
+            // 计算平面中心点
             const midPoint = new THREE.Vector3().addVectors(p1, p2).add(p3).multiplyScalar(1/3);
 
-            // 鑾峰彇妯″瀷椤剁偣
+            // 获取模型顶点
             let vertices = [];
             mesh.traverse((child) => {
                 if (child.isMesh && child.geometry) {
@@ -2354,7 +2354,7 @@
                 }
             });
 
-            // 鍦ㄥ钩闈㈤檮杩戞埅鍙栨埅闈㈢偣骞舵姇褰?
+            // 在平面附近截取截面点并投影
             const tolerance = size.x * 0.03;
             const sectionVertices = [];
             vertices.forEach(v => {
@@ -2367,7 +2367,7 @@
                 }
             });
 
-            // 鍦ㄦ埅闈㈤噰鏍风偣涓壘鍒版渶鎺ヨ繎涓変釜鏍囪鐐圭殑鐐?
+            // 在截面采样点中找到最接近三个标记点的点
             const findNearestPoint = (target) => {
                 let nearest = null;
                 let minDist = Infinity;
@@ -2386,13 +2386,13 @@
             const p3_proj = findNearestPoint(p3);
 
             if (p1_proj && p2_proj && p3_proj && sectionVertices.length > 10) {
-                // 鏋勫缓骞抽潰灞€閮ㄥ潗鏍囩郴
+                // 构建平面局部坐标系
                 const planeY = axisVector('up');
                 planeY.sub(planeNormal.clone().multiplyScalar(planeNormal.dot(planeY))).normalize();
                 const planeZ = new THREE.Vector3();
                 planeZ.crossVectors(planeNormal, planeY).normalize();
 
-                // 灏嗘墍鏈夋埅闈㈢偣杞崲鍒板钩闈㈠眬閮ㄥ潗鏍囩郴
+                // 将所有截面点转换到平面局部坐标系
                 const localPoints = sectionVertices.map(v => {
                     const local = v.clone().sub(midPoint);
                     return {
@@ -2402,12 +2402,12 @@
                     };
                 });
 
-                // 灏嗕笁涓爣璁扮偣涔熻浆鎹㈠埌灞€閮ㄥ潗鏍囩郴
+                // 将三个标记点也转换到局部坐标系
                 const p1_local = { x: planeY.dot(p1_proj.clone().sub(midPoint)), y: planeZ.dot(p1_proj.clone().sub(midPoint)) };
                 const p2_local = { x: planeY.dot(p2_proj.clone().sub(midPoint)), y: planeZ.dot(p2_proj.clone().sub(midPoint)) };
                 const p3_local = { x: planeY.dot(p3_proj.clone().sub(midPoint)), y: planeZ.dot(p3_proj.clone().sub(midPoint)) };
 
-                // 鎸夎搴︽帓搴忕偣
+                // 按角度排序点
                 const centerX = (p1_local.x + p2_local.x + p3_local.x) / 3;
                 const centerY = (p1_local.y + p2_local.y + p3_local.y) / 3;
 
@@ -2419,7 +2419,7 @@
                 p2_local.angle = Math.atan2(p2_local.y - centerY, p2_local.x - centerX);
                 p3_local.angle = Math.atan2(p3_local.y - centerY, p3_local.x - centerX);
 
-                // 鎵惧埌涓変釜鏍囪鐐瑰湪鎺掑簭鍚庣殑绱㈠紩
+                // 找到三个标记点在排序后的索引
                 const sortedPoints = [...localPoints].sort((a, b) => a.angle - b.angle);
 
                 let idx1 = -1, idx2 = -1, idx3 = -1;
@@ -2434,11 +2434,11 @@
                     if (diff3 < minDiff3) { idx3 = i; minDiff3 = diff3; }
                 });
 
-                // 鏍规嵁瑙掑害椤哄簭璁＄畻璺緞闀垮害
+                // 根据角度顺序计算路径长度
                 if (idx1 !== -1 && idx2 !== -1 && idx3 !== -1) {
                     const indices = [idx1, idx2, idx3].sort((a, b) => a - b);
 
-                    // 鎻愬彇璺緞鐐癸紙娌跨潃鎴潰杞粨锛屼繚鐣欏師濮嬮噰鏍风偣锛?
+                    // 提取路径点（沿着截面轮廓，保留原始采样点）
                     const pathPoints = [];
                     for (let i = indices[0]; i <= indices[2]; i++) {
                         pathPoints.push(sortedPoints[i].world.clone());
@@ -2459,8 +2459,8 @@
                     pathPoints.length = 0;
                     chosenPath.forEach(i => pathPoints.push(sortedPoints[i].world.clone()));
 
-                    // 浣跨敤楂樺瘑搴﹂噰鏍风殑Catmull-Rom鏍锋潯鎻掑€硷紝鍑忓皯杩囧害骞虫粦
-                    // 淇濈暀鍘熷杞粨褰㈢姸锛屽彧鍋氶€傚害鎻掑€?
+                    // 使用高密度采样的Catmull-Rom样条插值，减少过度平滑
+                    // 保留原始轮廓形状，只做适度插值
                     const interpolatedPoints = [];
                     const maxT = pathPoints.length - 1;
                     const highDensitySamples = 200;
@@ -2470,7 +2470,7 @@
                         interpolatedPoints.push(catmullRomSpline(pathPoints, t));
                     }
 
-                    // 璁＄畻寮ч暱
+                    // 计算弧长
                     let length = 0;
                     for (let i = 0; i < interpolatedPoints.length - 1; i++) {
                         length += interpolatedPoints[i].distanceTo(interpolatedPoints[i + 1]);
@@ -2479,7 +2479,7 @@
                 }
             }
 
-            // 鍥為€€鍒拌礉濉炲皵鏇茬嚎璁＄畻
+            // 回退到贝塞尔曲线计算
             let length = 0;
             const numSegments = 50;
             for (let i = 0; i < numSegments; i++) {
@@ -2530,36 +2530,36 @@
             const maxT = points.length - 1;
 
             if (focusRegion && points.length >= 3) {
-                // 鍦ㄥご椤朵笌鑰冲睆涔嬮棿澧炲姞閲囨牱瀵嗗害锛堥拡瀵瑰ご妯淮锛?
-                // 鍋囪涓棿鐐规槸澶撮《锛屼袱绔槸鑰冲睆
+                // 在头顶与耳屏之间增加采样密度（针对头横维）
+                // 假设中间点是头顶，两端是耳屏
                 const midIndex = Math.floor(points.length / 2);
                 const totalSegments = numSamples;
 
-                // 鍓嶆锛堣捣鐐瑰埌椤剁偣锛夊拰鍚庢锛堥《鐐瑰埌缁堢偣锛夊悇鍗犱竴鍗婏紝浣嗛《鐐归檮杩戞洿瀵嗛泦
+                // 前段（起点到顶点）和后段（顶点到终点）各占一半，但顶点附近更密集
                 const halfSamples = Math.floor(totalSegments / 2);
 
-                // 鍓嶆锛氳捣鐐瑰埌椤剁偣锛屼娇鐢ㄩ潪绾挎€ч噰鏍凤紝椤剁偣闄勮繎鏇村瘑闆?
+                // 前段：起点到顶点，使用非线性采样，顶点附近更密集
                 for (let i = 0; i <= halfSamples; i++) {
-                    const t = Math.pow(i / halfSamples, 0.5);  // 骞虫柟鏍瑰垎甯冿紝闈犺繎椤剁偣鏇村瘑闆?
+                    const t = Math.pow(i / halfSamples, 0.5);  // 平方根分布，靠近顶点更密集
                     const actualT = t * midIndex;
                     smoothed.push(catmullRomSpline(points, actualT));
                 }
 
-                // 鍚庢锛氶《鐐瑰埌缁堢偣锛屽悓鏍蜂娇鐢ㄩ潪绾挎€ч噰鏍?
+                // 后段：顶点到终点，同样使用非线性采样
                 for (let i = 1; i <= halfSamples; i++) {
                     const t = Math.pow(i / halfSamples, 0.5);
                     const actualT = midIndex + t * (maxT - midIndex);
                     smoothed.push(catmullRomSpline(points, actualT));
                 }
             } else {
-                // 鍧囧寑閲囨牱
+                // 均匀采样
                 for (let i = 0; i < numSamples; i++) {
                     const t = (i / (numSamples - 1)) * maxT;
                     smoothed.push(catmullRomSpline(points, t));
                 }
             }
 
-            // 棰濆鐨勫钩婊戣凯浠?- 绉诲姩骞冲潎婊ゆ尝
+            // 额外的平滑迭代 - 移动平均滤波
             for (let iter = 0; iter < iterations; iter++) {
                 const temp = [...smoothed];
                 const kernelSize = 5;
@@ -2593,14 +2593,14 @@
         }
 
         function displayCircumferenceSection2(eyebrowCenter, occipital, planeNormal, planeY, planeZ, midPoint, sectionVertices, hull) {
-            // 绉婚櫎涔嬪墠鐨勬埅闈㈠彲瑙嗗寲
+            // 移除之前的截面可视化
             measurementGroup.children = measurementGroup.children.filter(child =>
                 child.name !== 'circumferencePlane' &&
                 child.name !== 'circumferenceHull' &&
                 child.name !== 'circumferencePoints'
             );
 
-            // 鏄剧ず鎴潰骞抽潰
+            // 显示截面平面
             const planeGeo = new THREE.PlaneGeometry(size.x * 1.5, size.y * 1.5);
             const planeMaterial = new THREE.MeshBasicMaterial({
                 color: 0xff6600,
@@ -2611,7 +2611,7 @@
             const plane = new THREE.Mesh(planeGeo, planeMaterial);
             plane.position.copy(midPoint);
 
-            // 鏃嬭浆骞抽潰浣垮叾娉曞悜閲忎笌 planeNormal 涓€鑷?
+            // 旋转平面使其法向量与 planeNormal 一致
             const lookAt = new THREE.Vector3();
             lookAt.copy(midPoint).add(planeNormal);
             plane.lookAt(lookAt);
@@ -2619,14 +2619,14 @@
             plane.name = 'circumferencePlane';
             measurementGroup.add(plane);
 
-            // 鏄剧ず鎴潰鐐癸紙閲囨牱鏄剧ず锛? 鎶曞奖鍒板钩闈笂
+            // 显示截面点（采样显示）- 投影到平面上
             if (sectionVertices.length > 0) {
                 const pointGeo = new THREE.BufferGeometry();
                 const pointPositions = [];
                 const step = Math.max(1, Math.floor(sectionVertices.length / 50));
                 for (let i = 0; i < sectionVertices.length; i += step) {
                     const p = sectionVertices[i];
-                    // 灏嗙偣鎶曞奖鍒板钩闈笂
+                    // 将点投影到平面上
                     const local = p.clone().sub(midPoint);
                     const dist = planeNormal.dot(local);
                     const projected = p.clone().sub(planeNormal.clone().multiplyScalar(dist));
@@ -2639,17 +2639,17 @@
                 measurementGroup.add(points);
             }
 
-            // 鏄剧ず鍑稿寘杞粨 - 鎶曞奖鍒板钩闈笂
+            // 显示凸包轮廓 - 投影到平面上
             if (hull && hull.length > 2) {
                 const hullPoints = [];
                 hull.forEach(p => {
-                    // 灏嗗嚫鍖呯偣浠庡眬閮ㄥ潗鏍囪浆鎹㈠洖涓栫晫鍧愭爣
+                    // 将凸包点从局部坐标转换回世界坐标
                     const worldPoint = midPoint.clone()
                         .add(planeY.clone().multiplyScalar(p.x))
                         .add(planeZ.clone().multiplyScalar(p.y));
                     hullPoints.push(worldPoint);
                 });
-                hullPoints.push(hullPoints[0].clone()); // 闂悎
+                hullPoints.push(hullPoints[0].clone()); // 闭合
 
                 const hullGeo = new THREE.BufferGeometry().setFromPoints(hullPoints);
                 const hullMaterial = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3 });
@@ -2676,18 +2676,18 @@
             });
 
             if (markedPoints.eyebrowCenter && markedPoints.occipital) {
-                // 璁＄畻浠?X 鏂瑰悜涓鸿酱锛屼笖杩囩湁蹇冨拰鏋曞悗鐐圭殑骞抽潰
-                // 骞抽潰娉曞悜閲?= X 杞?脳 (鏋曞悗鐐?- 鐪夊績) 鍚戦噺
+                // 计算以 X 方向为轴，且过眉心和枕后点的平面
+                // 平面法向量 = X 轴 × (枕后点 - 眉心) 向量
                 const planeNormal = new THREE.Vector3();
                 planeNormal.subVectors(markedPoints.occipital, markedPoints.eyebrowCenter);
 
-                // X 杞存柟鍚戝悜閲?
+                // X 轴方向向量
                 const xAxis = axisVector('lr');
 
-                // 璁＄畻骞抽潰娉曞悜閲忥細X 杞?脳 鐪夊績 - 鏋曞悗鐐瑰悜閲?
+                // 计算平面法向量：X 轴 × 眉心 - 枕后点向量
                 planeNormal.crossVectors(xAxis, planeNormal).normalize();
 
-                // 鍦ㄨ骞抽潰闄勮繎鎴彇鎴潰鐐癸紙璺濈骞抽潰鍦?tolerance 鑼冨洿鍐咃級
+                // 在该平面附近截取截面点（距离平面在 tolerance 范围内）
                 const tolerance = Math.min(size.x, size.y, size.z) * 0.018;
                 const sectionVertices = vertices.filter(v => {
                     const dist = Math.abs(planeNormal.dot(v.clone().sub(markedPoints.eyebrowCenter)));
@@ -2695,24 +2695,24 @@
                 });
 
                 if (sectionVertices.length > 10) {
-                    // 灏嗙偣鎶曞奖鍒拌繃鐪夊績鍜屾灂鍚庣偣鐨勫钩闈笂
+                    // 将点投影到过眉心和枕后点的平面上
                     const midPoint = new THREE.Vector3();
                     midPoint.addVectors(markedPoints.eyebrowCenter, markedPoints.occipital).multiplyScalar(0.5);
 
-                    // 鏋勫缓骞抽潰灞€閮ㄥ潗鏍囩郴
-                    // Y 杞达細涓栫晫 Y 杞存姇褰卞埌骞抽潰涓?
+                    // 构建平面局部坐标系
+                    // Y 轴：世界 Y 轴投影到平面上
                     const planeY = axisVector('up');
                     planeY.sub(planeNormal.clone().multiplyScalar(planeNormal.dot(planeY))).normalize();
 
-                    // Z 杞达細骞抽潰娉曞悜閲?脳 骞抽潰 Y 杞?
+                    // Z 轴：平面法向量 × 平面 Y 轴
                     const planeZ = new THREE.Vector3();
                     planeZ.crossVectors(planeNormal, planeY).normalize();
 
                     const projectToPlane2D = (p) => {
                         const local = p.clone().sub(midPoint);
                         return {
-                            x: planeY.dot(local),  // Y 鏂瑰悜鍧愭爣
-                            y: planeZ.dot(local)   // Z 鏂瑰悜鍧愭爣
+                            x: planeY.dot(local),  // Y 方向坐标
+                            y: planeZ.dot(local)   // Z 方向坐标
                         };
                     };
                     const points2D = sectionVertices.map(projectToPlane2D);
@@ -2730,12 +2730,12 @@
                             circumference += p1.distanceTo(p2);
                         }
 
-                        // 搴旂敤鍗曚綅杞崲绯绘暟
+                        // 应用单位转换系数
                         const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
                         document.getElementById('circumferenceValue').textContent = (circumference * scaleFactor).toFixed(2) + ' mm';
                     }
 
-                    // 鏄剧ず鎴潰鍙鍖?
+                    // 显示截面可视化
                     if (!suppressSceneRendering) displayCircumferenceSection2(markedPoints.eyebrowCenter, markedPoints.occipital, planeNormal, planeY, planeZ, midPoint, sectionVertices, hull);
                 }
             }
@@ -2798,7 +2798,7 @@
 
                 if (!suppressSceneRendering) displayArcWithPlane('transverse', markedPoints.leftEar, markedPoints.headTop, markedPoints.rightEar, 0x00ff88);
             } else {
-                // 绉婚櫎寮х嚎銆佹埅闈€侀噰鏍风偣銆佸姬绾跨偣鍜岀洿绾?
+                // 移除弧线、截面、采样点、弧线点和直线
                 measurementGroup.children = measurementGroup.children.filter(child =>
                     child.name !== 'transverseArc' &&
                     child.name !== 'transversePlane' &&
@@ -2813,10 +2813,10 @@
                 const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
                 const longitudinalArc = calculateArcLength(markedPoints.eyebrowCenter, markedPoints.headTop, markedPoints.occipital) * scaleFactor;
                 document.getElementById('longitudinalArcValue').textContent = longitudinalArc.toFixed(2) + ' mm';
-                // 鏄剧ず澶寸旱缁村姬绾垮拰鎴潰
+                // 显示头纵维弧线和截面
                 if (!suppressSceneRendering) displayArcWithPlane('longitudinal', markedPoints.eyebrowCenter, markedPoints.headTop, markedPoints.occipital, 0xff00ff);
             } else {
-                // 绉婚櫎寮х嚎銆佹埅闈€侀噰鏍风偣鍜屽姬绾跨偣
+                // 移除弧线、截面、采样点和弧线点
                 measurementGroup.children = measurementGroup.children.filter(child =>
                     child.name !== 'longitudinalArc' &&
                     child.name !== 'longitudinalPlane' &&
@@ -3017,7 +3017,7 @@ ${overrides}</Types>`
                 `${pointNames[key]} Y`,
                 `${pointNames[key]} Z`
             ]);
-            const header = ['鏂囦欢鍚?, '鐘舵€?, '澶嶆牳鍘熷洜', '閿欒淇℃伅', ...measurementHeaders, ...landmarkHeaders];
+            const header = ['文件名', '状态', '复核原因', '错误信息', ...measurementHeaders, ...landmarkHeaders];
             const rows = samples.map(sample => {
                 const measurements = measurementRows.map(item => sample.measurements?.[item.id] ?? '');
                 const landmarks = Object.keys(pointNames).flatMap(key => {
@@ -3031,7 +3031,7 @@ ${overrides}</Types>`
                 return [
                     sample.fileName,
                     batchStatusLabels[sample.status] || sample.status,
-                    (sample.reviewReasons || []).join('锛?),
+                    (sample.reviewReasons || []).join('；'),
                     sample.errorMessage || '',
                     ...measurements,
                     ...landmarks
@@ -3052,33 +3052,33 @@ ${overrides}</Types>`
                     landmarks: serializeMarkedPoints()
                 }];
             if (!batchSamples.length && !mesh) {
-                document.getElementById('status').textContent = '璇峰厛鍔犺浇鎴栦笂浼犳ā鍨?;
+                document.getElementById('status').textContent = '请先加载或上传模型';
                 return;
             }
             const metaTable = [
-                ['瀵煎嚭鏃堕棿', new Date().toLocaleString()],
-                ['鍗曚綅绯绘暟', getScaleFactor()],
-                ['鏍锋湰鏁伴噺', exportSamples.length],
-                ['鎴愬姛', exportSamples.filter(sample => sample.status === 'complete').length],
-                ['闇€澶嶆牳', exportSamples.filter(sample => sample.status === 'needs_review').length],
-                ['澶辫触', exportSamples.filter(sample => sample.status === 'failed').length]
+                ['导出时间', new Date().toLocaleString()],
+                ['单位系数', getScaleFactor()],
+                ['样本数量', exportSamples.length],
+                ['成功', exportSamples.filter(sample => sample.status === 'complete').length],
+                ['需复核', exportSamples.filter(sample => sample.status === 'needs_review').length],
+                ['失败', exportSamples.filter(sample => sample.status === 'failed').length]
             ];
             const blob = createXlsxBlob([
-                { name: '娴嬮噺鎬昏〃', rows: buildBatchExportRows(exportSamples) },
-                { name: '瀵煎嚭淇℃伅', rows: metaTable }
+                { name: '测量总表', rows: buildBatchExportRows(exportSamples) },
+                { name: '导出信息', rows: metaTable }
             ]);
             const fileName = batchSamples.length ? 'batch-head-measurements.xlsx' : `${(currentModelName || 'head-model').replace(/[\\/:*?"<>|]+/g, '_').replace(/\.obj$/i, '')}-measurements.xlsx`;
             downloadBlob(blob, fileName);
-            document.getElementById('status').textContent = 'Excel xlsx 鏁版嵁琛ㄦ牸宸茬敓鎴?;
+            document.getElementById('status').textContent = 'Excel xlsx 数据表格已生成';
         }
 
         function displayLine(name, p1, p2, color) {
-            // 绉婚櫎涔嬪墠鐨勭洿绾?
+            // 移除之前的直线
             measurementGroup.children = measurementGroup.children.filter(child =>
                 child.name !== name
             );
 
-            // 鍒涘缓鐩寸嚎
+            // 创建直线
             const lineGeo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
             const lineMaterial = new THREE.LineBasicMaterial({ color: color, linewidth: 2, dashed: true });
             const line = new THREE.Line(lineGeo, lineMaterial);
@@ -3087,7 +3087,7 @@ ${overrides}</Types>`
         }
 
         function displayArcWithPlane(name, p1, p2, p3, color) {
-            // 绉婚櫎涔嬪墠鐨勫姬绾裤€佹埅闈㈠拰閲囨牱鐐?
+            // 移除之前的弧线、截面和采样点
             measurementGroup.children = measurementGroup.children.filter(child =>
                 child.name !== name + 'Arc' &&
                 child.name !== name + 'Plane' &&
@@ -3095,15 +3095,15 @@ ${overrides}</Types>`
                 child.name !== name + 'ArcPoints'
             );
 
-            // 璁＄畻涓夌偣纭畾鐨勫钩闈?
+            // 计算三点确定的平面
             const v1 = new THREE.Vector3().subVectors(p2, p1);
             const v2 = new THREE.Vector3().subVectors(p3, p1);
             const planeNormal = new THREE.Vector3().crossVectors(v1, v2).normalize();
 
-            // 璁＄畻骞抽潰涓績鐐癸紙涓夌偣鐨勫钩鍧囷級
+            // 计算平面中心点（三点的平均）
             const midPoint = new THREE.Vector3().addVectors(p1, p2).add(p3).multiplyScalar(1/3);
 
-            // 鑾峰彇妯″瀷椤剁偣鐢ㄤ簬鎴潰閲囨牱
+            // 获取模型顶点用于截面采样
             let vertices = [];
             mesh.traverse((child) => {
                 if (child.isMesh && child.geometry) {
@@ -3117,13 +3117,13 @@ ${overrides}</Types>`
                 }
             });
 
-            // 鍦ㄨ骞抽潰闄勮繎鎴彇鎴潰鐐瑰苟鎶曞奖鍒板钩闈笂
+            // 在该平面附近截取截面点并投影到平面上
             const tolerance = size.x * 0.03;
             const sectionVertices = [];
             vertices.forEach(v => {
                 const dist = Math.abs(planeNormal.dot(v.clone().sub(midPoint)));
                 if (dist < tolerance) {
-                    // 鎶曞奖鍒板钩闈笂
+                    // 投影到平面上
                     const local = v.clone().sub(midPoint);
                     const d = planeNormal.dot(local);
                     const projected = v.clone().sub(planeNormal.clone().multiplyScalar(d));
@@ -3131,7 +3131,7 @@ ${overrides}</Types>`
                 }
             });
 
-            // 鏄剧ず鎴潰閲囨牱鐐?
+            // 显示截面采样点
             if (sectionVertices.length > 10) {
                 const pointPositions = [];
                 const step = Math.max(1, Math.floor(sectionVertices.length / 50));
@@ -3147,7 +3147,7 @@ ${overrides}</Types>`
                 measurementGroup.add(points);
             }
 
-            // 鍒涘缓鎴潰骞抽潰锛堜粎鐢ㄤ簬鏄剧ず鍙傝€冿級
+            // 创建截面平面（仅用于显示参考）
             const planeSize = Math.max(size.x, size.y, size.z) * 1.2;
             const planeGeo = new THREE.PlaneGeometry(planeSize, planeSize);
             const planeMaterial = new THREE.MeshBasicMaterial({
@@ -3159,14 +3159,14 @@ ${overrides}</Types>`
             const plane = new THREE.Mesh(planeGeo, planeMaterial);
             plane.position.copy(midPoint);
 
-            // 鏃嬭浆骞抽潰浣垮叾鏈濆悜姝ｇ‘
+            // 旋转平面使其朝向正确
             const lookAt = new THREE.Vector3().copy(midPoint).add(planeNormal);
             plane.lookAt(lookAt);
 
             plane.name = name + 'Plane';
             measurementGroup.add(plane);
 
-            // 鍦ㄦ埅闈㈤噰鏍风偣涓壘鍒版渶鎺ヨ繎涓変釜鏍囪鐐圭殑鐐?
+            // 在截面采样点中找到最接近三个标记点的点
             const findNearestPoint = (target) => {
                 let nearest = null;
                 let minDist = Infinity;
@@ -3185,13 +3185,13 @@ ${overrides}</Types>`
             const p3_proj = findNearestPoint(p3);
 
             if (p1_proj && p2_proj && p3_proj && sectionVertices.length > 10) {
-                // 鏋勫缓骞抽潰灞€閮ㄥ潗鏍囩郴
+                // 构建平面局部坐标系
                 const planeY = axisVector('up');
                 planeY.sub(planeNormal.clone().multiplyScalar(planeNormal.dot(planeY))).normalize();
                 const planeZ = new THREE.Vector3();
                 planeZ.crossVectors(planeNormal, planeY).normalize();
 
-                // 灏嗘墍鏈夋埅闈㈢偣杞崲鍒板钩闈㈠眬閮ㄥ潗鏍囩郴
+                // 将所有截面点转换到平面局部坐标系
                 const localPoints = sectionVertices.map(v => {
                     const local = v.clone().sub(midPoint);
                     return {
@@ -3201,7 +3201,7 @@ ${overrides}</Types>`
                     };
                 });
 
-                // 灏嗕笁涓爣璁扮偣涔熻浆鎹㈠埌灞€閮ㄥ潗鏍囩郴
+                // 将三个标记点也转换到局部坐标系
                 const p1_local = {
                     x: planeY.dot(p1_proj.clone().sub(midPoint)),
                     y: planeZ.dot(p1_proj.clone().sub(midPoint))
@@ -3215,27 +3215,27 @@ ${overrides}</Types>`
                     y: planeZ.dot(p3_proj.clone().sub(midPoint))
                 };
 
-                // 鎵惧埌浠巔1鍒皃2鍒皃3鐨勮矾寰勭偣锛堝湪鎴潰閲囨牱鐐逛腑锛?
+                // 找到从p1到p2到p3的路径点（在截面采样点中）
                 const arcPath = [];
 
-                // 鎸夎搴︽帓搴忕偣锛屾壘鍒颁粠p1鍒皃2鍒皃3鐨勮矾寰?
+                // 按角度排序点，找到从p1到p2到p3的路径
                 const centerX = (p1_local.x + p2_local.x + p3_local.x) / 3;
                 const centerY = (p1_local.y + p2_local.y + p3_local.y) / 3;
 
-                // 璁＄畻姣忎釜鐐圭浉瀵逛簬涓績鐨勮搴?
+                // 计算每个点相对于中心的角度
                 localPoints.forEach(p => {
                     p.angle = Math.atan2(p.y - centerY, p.x - centerX);
                 });
 
-                // 璁＄畻涓変釜鏍囪鐐圭殑瑙掑害
+                // 计算三个标记点的角度
                 p1_local.angle = Math.atan2(p1_local.y - centerY, p1_local.x - centerX);
                 p2_local.angle = Math.atan2(p2_local.y - centerY, p2_local.x - centerX);
                 p3_local.angle = Math.atan2(p3_local.y - centerY, p3_local.x - centerX);
 
-                // 鎵惧埌浠巔1鍒皃2鍒皃3鐨勮矾寰?
+                // 找到从p1到p2到p3的路径
                 const sortedPoints = [...localPoints].sort((a, b) => a.angle - b.angle);
 
-                // 鎵惧埌涓変釜鏍囪鐐瑰湪鎺掑簭鍚庣殑绱㈠紩
+                // 找到三个标记点在排序后的索引
                 let idx1 = -1, idx2 = -1, idx3 = -1;
                 let minDiff1 = Infinity, minDiff2 = Infinity, minDiff3 = Infinity;
 
@@ -3248,17 +3248,17 @@ ${overrides}</Types>`
                     if (diff3 < minDiff3) { idx3 = i; minDiff3 = diff3; }
                 });
 
-                // 鏍规嵁瑙掑害椤哄簭纭畾璺緞鏂瑰悜
+                // 根据角度顺序确定路径方向
                 if (idx1 !== -1 && idx2 !== -1 && idx3 !== -1) {
-                    // 纭畾浠巔1鍒皃2鍒皃3鐨勬纭『搴?
+                    // 确定从p1到p2到p3的正确顺序
                     const indices = [idx1, idx2, idx3].sort((a, b) => a - b);
 
-                    // 娌挎帓搴忓悗鐨勭偣閫夊彇璺緞
+                    // 沿排序后的点选取路径
                     for (let i = indices[0]; i <= indices[2]; i++) {
                         arcPath.push(sortedPoints[i].world.clone());
                     }
 
-                    // 濡傛灉鐐瑰お灏戯紝浣跨敤浜屾璐濆灏旀洸绾夸綔涓哄閫?
+                    // 如果点太少，使用二次贝塞尔曲线作为备选
                     if (arcPath.length < 5) {
                         arcPath.length = 0;
                         const numSegments = 30;
@@ -3269,7 +3269,7 @@ ${overrides}</Types>`
                         }
                     }
                 } else {
-                    // 鍥為€€鍒拌礉濉炲皵鏇茬嚎
+                    // 回退到贝塞尔曲线
                     const numSegments = 30;
                     for (let i = 0; i <= numSegments; i++) {
                         const t = i / numSegments;
@@ -3278,7 +3278,7 @@ ${overrides}</Types>`
                     }
                 }
 
-                // 浣跨敤楂樺瘑搴atmull-Rom鎻掑€硷紝涓嶅仛杩囧害骞虫粦锛屼繚鎸佽创杩戣疆寤?
+                // 使用高密度Catmull-Rom插值，不做过度平滑，保持贴近轮廓
                 const interpolatedArcPath = [];
                 if (arcPath.length > 2) {
                     const maxT = arcPath.length - 1;
@@ -3291,14 +3291,14 @@ ${overrides}</Types>`
                     interpolatedArcPath.push(...arcPath);
                 }
 
-                // 鍒涘缓寮х嚎锛堜娇鐢ㄦ彃鍊煎悗鐨勮矾寰勶紝璐磋繎杞粨锛?
+                // 创建弧线（使用插值后的路径，贴近轮廓）
                 const arcGeo = new THREE.BufferGeometry().setFromPoints(interpolatedArcPath);
                 const arcMaterial = new THREE.LineBasicMaterial({ color: color, linewidth: 3 });
                 const arcLine = new THREE.Line(arcGeo, arcMaterial);
                 arcLine.name = name + 'Arc';
                 measurementGroup.add(arcLine);
 
-                // 鍦ㄥ姬绾夸笂娣诲姞閲囨牱鐐癸紙浣跨敤鎻掑€煎悗鐨勮矾寰勶級
+                // 在弧线上添加采样点（使用插值后的路径）
                 const arcSamplePoints = [];
                 const step = Math.max(1, Math.floor(interpolatedArcPath.length / 10));
                 for (let i = 0; i < interpolatedArcPath.length; i += step) {
