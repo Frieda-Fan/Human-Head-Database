@@ -10,7 +10,15 @@
       "destination": "/web/measure/index.html"
     },
     {
+      "source": "/measure/index.html",
+      "destination": "/web/measure/index.html"
+    },
+    {
       "source": "/generate",
+      "destination": "/web/generate/index.html"
+    },
+    {
+      "source": "/generate/index.html",
       "destination": "/web/generate/index.html"
     }
   ],
