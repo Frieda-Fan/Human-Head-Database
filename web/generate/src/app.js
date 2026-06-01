@@ -38,8 +38,8 @@ const DERIVED_PARAMETERS = [
 const MODEL_PARAMETER_META = [...PRIMARY_PARAMETERS, ...INTERNAL_MODEL_PARAMETERS];
 
 const MODEL_OPTIONS = {
-  male: { label: "男性", url: "./assets/models/asian-head.obj", filePrefix: "male-head-parametric" },
-  female: { label: "女性", url: "./assets/models/female-head.obj", filePrefix: "female-head-parametric" },
+  male: { label: "男性", url: "/web/generate/assets/models/asian-head.obj", filePrefix: "male-head-parametric" },
+  female: { label: "女性", url: "/web/generate/assets/models/female-head.obj", filePrefix: "female-head-parametric" },
 };
 const MAX_PREVIEW_FACES = 16000;
 const primaryParameters = Object.fromEntries(PRIMARY_PARAMETERS.map((item) => [item.key, item.value]));
