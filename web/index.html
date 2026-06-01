@@ -101,7 +101,7 @@
             display: flex; align-items: center; gap: 8px; margin-top: 8px;
         }
         .save-row {
-            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px;
+            display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 8px;
         }
         .save-row button { width: 100%; min-width: 0; }
         #batchPanel {
@@ -179,6 +179,8 @@
         </div>
         <div class="save-row">
             <button onclick="saveMarkedPoints({ notify: true })">保存打点</button>
+            <button onclick="confirmBatchTemplate()">确认模板</button>
+            <button onclick="applyTemplateToLoadedModel({ manual: true })">套用模板</button>
             <button onclick="exportMarkDraft()">导出打点JSON</button>
             <input type="file" id="markImport" accept=".json,application/json" style="display:none;" onchange="importMarkDraft(event)">
             <button onclick="document.getElementById('markImport').click()">导入打点JSON</button>
@@ -318,7 +320,10 @@
         const MARK_STORAGE_KEY = `headModelManualSettings:${MARK_STORAGE_VERSION}`;
         const MARK_DRAFT_VERSION = 'landmark-draft-v2';
         const MARK_DRAFT_PREFIX = `headModelLandmarkDraft:${MARK_DRAFT_VERSION}:`;
+        const LEARNING_LIBRARY_KEY = 'headModelLandmarkLearning:v1';
+        const TEMPLATE_TRANSFER_MIN_LEARNING_SAMPLES = 5;
         let currentMarkDraftKey = '';
+        let batchTemplate = null;
         const LEGACY_MARK_STORAGE_KEYS = ['headModelMarkedPoints'];
         const measurementRows = [
             { id: 'circumferenceValue', label: '头围' },
@@ -410,6 +415,252 @@
             return true;
         }
 
+        function getSemanticBounds() {
+            if (!box) return null;
+            const lrMin = box.min[measurementAxes.lr];
+            const lrMax = box.max[measurementAxes.lr];
+            const upMin = box.min[measurementAxes.up];
+            const upMax = box.max[measurementAxes.up];
+            const fbA = box.min[measurementAxes.fb] * measurementAxes.frontSign;
+            const fbB = box.max[measurementAxes.fb] * measurementAxes.frontSign;
+            return {
+                lrMin: Math.min(lrMin, lrMax),
+                lrMax: Math.max(lrMin, lrMax),
+                upMin: Math.min(upMin, upMax),
+                upMax: Math.max(upMin, upMax),
+                fbMin: Math.min(fbA, fbB),
+                fbMax: Math.max(fbA, fbB)
+            };
+        }
+
+        function pointToSemanticRatios(point) {
+            const b = getSemanticBounds();
+            if (!point || !b) return null;
+            const lrSpan = Math.max(b.lrMax - b.lrMin, 0.000001);
+            const upSpan = Math.max(b.upMax - b.upMin, 0.000001);
+            const fbSpan = Math.max(b.fbMax - b.fbMin, 0.000001);
+            return {
+                lr: (axisValue(point, 'lr') - b.lrMin) / lrSpan,
+                up: (axisValue(point, 'up') - b.upMin) / upSpan,
+                fb: (axisValue(point, 'fb') - b.fbMin) / fbSpan
+            };
+        }
+
+        function semanticRatiosToPoint(ratios) {
+            const b = getSemanticBounds();
+            if (!ratios || !b) return null;
+            const lr = b.lrMin + clamp(ratios.lr, -0.15, 1.15) * (b.lrMax - b.lrMin);
+            const up = b.upMin + clamp(ratios.up, -0.15, 1.15) * (b.upMax - b.upMin);
+            const fb = b.fbMin + clamp(ratios.fb, -0.15, 1.15) * (b.fbMax - b.fbMin);
+            const point = new THREE.Vector3();
+            point[measurementAxes.lr] = lr;
+            point[measurementAxes.up] = up;
+            point[measurementAxes.fb] = fb / measurementAxes.frontSign;
+            return point;
+        }
+
+        function getModelFeatures() {
+            const b = getSemanticBounds();
+            if (!b) return {};
+            return {
+                width: b.lrMax - b.lrMin,
+                height: b.upMax - b.upMin,
+                depth: b.fbMax - b.fbMin,
+                scaleFactor: getScaleFactor()
+            };
+        }
+
+        function cloneRatios(ratios) {
+            return ratios ? { lr: ratios.lr, up: ratios.up, fb: ratios.fb } : null;
+        }
+
+        function snapPointToMeshSurface(targetPoint) {
+            if (!targetPoint || !mesh) return targetPoint;
+            let best = null;
+            let bestDistance = Infinity;
+            const tmp = new THREE.Vector3();
+            mesh.traverse((child) => {
+                if (!child.isMesh || !child.geometry?.attributes?.position) return;
+                const positions = child.geometry.attributes.position;
+                for (let i = 0; i < positions.count; i++) {
+                    tmp.fromBufferAttribute(positions, i);
+                    child.localToWorld(tmp);
+                    const d = tmp.distanceToSquared(targetPoint);
+                    if (d < bestDistance) {
+                        bestDistance = d;
+                        best = tmp.clone();
+                    }
+                }
+            });
+            return best || targetPoint;
+        }
+
+        function readLearningLibrary() {
+            try {
+                const stored = localStorage.getItem(LEARNING_LIBRARY_KEY);
+                if (!stored) return { version: 1, samples: {} };
+                const data = JSON.parse(stored);
+                return data?.version === 1 && data.samples ? data : { version: 1, samples: {} };
+            } catch (error) {
+                console.error('读取学习库失败:', error);
+                return { version: 1, samples: {} };
+            }
+        }
+
+        function writeLearningLibrary(library) {
+            try {
+                localStorage.setItem(LEARNING_LIBRARY_KEY, JSON.stringify(library));
+            } catch (error) {
+                console.error('保存学习库失败:', error);
+            }
+        }
+
+        function getAverageLearningOffset(pointKey) {
+            const library = readLearningLibrary();
+            const offsets = Object.values(library.samples || {})
+                .map(sample => sample.correctionRatios?.[pointKey])
+                .filter(Boolean);
+            if (offsets.length < TEMPLATE_TRANSFER_MIN_LEARNING_SAMPLES) {
+                return { offset: { lr: 0, up: 0, fb: 0 }, count: offsets.length };
+            }
+            const sum = offsets.reduce((acc, item) => ({
+                lr: acc.lr + item.lr,
+                up: acc.up + item.up,
+                fb: acc.fb + item.fb
+            }), { lr: 0, up: 0, fb: 0 });
+            return {
+                offset: {
+                    lr: sum.lr / offsets.length,
+                    up: sum.up / offsets.length,
+                    fb: sum.fb / offsets.length
+                },
+                count: offsets.length
+            };
+        }
+
+        function saveLearningFromCurrentSample() {
+            const sample = getCurrentSample();
+            if (!sample?.initialLandmarks || !Object.keys(sample.initialLandmarks).length || !mesh) return;
+            const correctionRatios = {};
+            Object.keys(pointNames).forEach(key => {
+                const initialPoint = deserializePoint(sample.initialLandmarks[key]);
+                const correctedPoint = markedPoints[key];
+                const initialRatio = pointToSemanticRatios(initialPoint);
+                const correctedRatio = pointToSemanticRatios(correctedPoint);
+                if (!initialRatio || !correctedRatio) return;
+                correctionRatios[key] = {
+                    lr: correctedRatio.lr - initialRatio.lr,
+                    up: correctedRatio.up - initialRatio.up,
+                    fb: correctedRatio.fb - initialRatio.fb
+                };
+            });
+            if (!Object.keys(correctionRatios).length) return;
+            const library = readLearningLibrary();
+            library.samples[sample.draftKey || currentMarkDraftKey] = {
+                sampleId: sample.id,
+                fileName: sample.fileName,
+                savedAt: new Date().toISOString(),
+                source: sample.predictionSource || 'manual',
+                features: getModelFeatures(),
+                correctionRatios
+            };
+            const entries = Object.entries(library.samples);
+            if (entries.length > 300) {
+                library.samples = Object.fromEntries(entries.slice(entries.length - 300));
+            }
+            writeLearningLibrary(library);
+        }
+
+        function captureTemplateFromCurrentModel(sample = getCurrentSample()) {
+            if (!mesh) return null;
+            const ratioLandmarks = {};
+            Object.entries(markedPoints).forEach(([key, point]) => {
+                const ratios = pointToSemanticRatios(point);
+                if (ratios) ratioLandmarks[key] = cloneRatios(ratios);
+            });
+            if (!Object.keys(ratioLandmarks).length) return null;
+            return {
+                version: 1,
+                templateSampleId: sample?.id || '',
+                templateFileName: sample?.fileName || currentModelName,
+                confirmedAt: new Date().toISOString(),
+                features: getModelFeatures(),
+                landmarks: ratioLandmarks
+            };
+        }
+
+        function confirmBatchTemplate() {
+            const sample = getCurrentSample();
+            if (!mesh) {
+                document.getElementById('status').textContent = '请先加载并校正第一个模板模型';
+                return;
+            }
+            batchTemplate = captureTemplateFromCurrentModel(sample);
+            if (!batchTemplate) {
+                document.getElementById('status').textContent = '模板确认失败，请先至少标记一个关键点';
+                return;
+            }
+            if (sample) {
+                updateSampleFromCurrentView(sample, {
+                    status: sample.status === 'failed' ? 'failed' : 'complete',
+                    errorMessage: ''
+                });
+                sample.manuallyEdited = false;
+                sample.predictionSource = 'batch_template';
+            }
+            saveMarkedPoints();
+            document.getElementById('status').textContent = `已确认批次模板：${batchTemplate.templateFileName}。再次点击“开始批量测量”会用模板迁移后续模型。`;
+        }
+
+        function applyTemplateToLoadedModel(options = {}) {
+            if (!batchTemplate?.landmarks || !mesh) {
+                if (options.manual) document.getElementById('status').textContent = '请先加载模型并确认批次模板';
+                return null;
+            }
+            const predictedLandmarks = {};
+            const learningCounts = {};
+            Object.entries(batchTemplate.landmarks).forEach(([key, ratios]) => {
+                const learned = getAverageLearningOffset(key);
+                learningCounts[key] = learned.count;
+                const correctedRatios = {
+                    lr: ratios.lr + learned.offset.lr,
+                    up: ratios.up + learned.offset.up,
+                    fb: ratios.fb + learned.offset.fb
+                };
+                const mappedPoint = semanticRatiosToPoint(correctedRatios);
+                const snappedPoint = snapPointToMeshSurface(mappedPoint);
+                if (snappedPoint) {
+                    predictedLandmarks[key] = serializePoint(snappedPoint);
+                    placeMarker(key, snappedPoint, { silent: true });
+                }
+            });
+            updateMeasurements({ skipSampleSync: true, skipDraftSave: true });
+            const sample = getCurrentSample();
+            if (sample) {
+                sample.initialLandmarks = predictedLandmarks;
+                sample.landmarks = serializeMarkedPoints();
+                sample.measurements = getMeasurementSnapshot(1);
+                sample.axes = { ...measurementAxes };
+                sample.detectedCount = Object.values(markedPoints).filter(Boolean).length;
+                sample.processed = true;
+                sample.predictionSource = 'template_transfer';
+                if (sample.status !== 'failed') sample.status = 'needs_review';
+                sample.reviewReasons = ['模板迁移预标注，需人工复核'];
+                renderBatchPanel();
+            }
+            if (options.manual) {
+                saveMarkedPoints();
+                document.getElementById('status').textContent = '已套用批次模板点位，请检查并微调后保存';
+            }
+            return {
+                detectedCount: Object.values(markedPoints).filter(Boolean).length,
+                totalCount: Object.keys(pointNames).length,
+                confidence: 0.68,
+                templateTransferUsed: true,
+                learningCounts
+            };
+        }
+
         function restoreMarkedPoints(points) {
             isRestoringSample = true;
             resetMarks({ silent: true });
@@ -445,6 +696,8 @@
                 landmarks: {},
                 measurements: {},
                 axes: null,
+                initialLandmarks: {},
+                predictionSource: '',
                 detectedCount: 0,
                 reviewReasons: [],
                 errorMessage: '',
@@ -751,7 +1004,9 @@
                         const hasMarkedPoints = Object.values(markedPoints).some(p => p !== null);
                         const shouldAutoDetect = options.autoDetect !== false && !hasMarkedPoints;
                         let detectionMeta = null;
-                        if (shouldAutoDetect) {
+                        if (shouldAutoDetect && options.useTemplatePrediction) {
+                            detectionMeta = applyTemplateToLoadedModel();
+                        } else if (shouldAutoDetect) {
                             detectionMeta = autoDetectPoints({ source: options.source || 'auto' });
                         } else if (hasMarkedPoints) {
                             updateMeasurements({ skipSampleSync: true });
@@ -833,6 +1088,7 @@
                 applyStoredDraftToSample(sample);
                 return sample;
             });
+            batchTemplate = null;
             currentSampleId = null;
             renderBatchPanel();
             document.getElementById('status').textContent = `已添加 ${batchSamples.length} 个 OBJ 样本${files.length > 50 ? '，已按最多 50 个截断' : ''}`;
@@ -859,6 +1115,7 @@
             if (detectionMeta?.eyeFallbackUsed) reasons.push('眼点使用估算');
             if (detectionMeta?.leftTragionFallback || detectionMeta?.rightTragionFallback) reasons.push('耳屏点使用估算');
             if ((detectionMeta?.confidence ?? 1) < 0.72) reasons.push('confidence 低');
+            if (detectionMeta?.templateTransferUsed) reasons.push('模板迁移预标注');
             return reasons;
         }
 
@@ -876,12 +1133,15 @@
                     autoDetect: true,
                     source: 'batch',
                     background: true,
-                    draftKey: sample.draftKey
+                    draftKey: sample.draftKey,
+                    useTemplatePrediction: !!batchTemplate && sample.id !== batchTemplate.templateSampleId
                 });
                 const reviewReasons = sampleNeedsReview(result.detectionMeta);
                 sample.landmarks = result.snapshot?.landmarks || {};
                 sample.measurements = result.snapshot?.measurements || {};
                 sample.axes = result.snapshot?.axes || null;
+                sample.initialLandmarks = result.snapshot?.landmarks || {};
+                sample.predictionSource = result.detectionMeta?.templateTransferUsed ? 'template_transfer' : 'auto_detect';
                 sample.detectedCount = result.snapshot?.detectedCount || 0;
                 sample.processed = true;
                 sample.status = reviewReasons.length ? 'needs_review' : 'complete';
@@ -902,8 +1162,17 @@
                 return;
             }
             if (isBatchProcessing) return;
+            if (!batchTemplate) {
+                isBatchProcessing = true;
+                await processSample(batchSamples[0], 0);
+                isBatchProcessing = false;
+                await loadSampleForReview(batchSamples[0].id);
+                document.getElementById('status').textContent = '请先校正第一个模型，然后点击“确认模板”；再点击“开始批量测量”处理后续模型';
+                return;
+            }
             isBatchProcessing = true;
             for (let i = 0; i < batchSamples.length; i++) {
+                if (batchSamples[i].id === batchTemplate.templateSampleId && batchSamples[i].processed) continue;
                 await processSample(batchSamples[i], i);
             }
             isBatchProcessing = false;
@@ -1024,6 +1293,7 @@
             try {
                 const payload = buildMarkDraftPayload();
                 localStorage.setItem(currentMarkDraftKey, JSON.stringify(payload));
+                saveLearningFromCurrentSample();
                 if (options.notify) {
                     document.getElementById('status').textContent = `已保存 ${payload.modelName || '当前模型'} 的打点草稿`;
                 }
@@ -3457,6 +3727,8 @@ ${overrides}</Types>`
         window.saveMarkedPoints = saveMarkedPoints;
         window.exportMarkDraft = exportMarkDraft;
         window.importMarkDraft = importMarkDraft;
+        window.confirmBatchTemplate = confirmBatchTemplate;
+        window.applyTemplateToLoadedModel = applyTemplateToLoadedModel;
         window.setMarkMode = setMarkMode;
         window.resetMarks = resetMarks;
         window.autoDetectPoints = autoDetectPoints;
