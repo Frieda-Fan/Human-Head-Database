@@ -4,6 +4,14 @@
     {
       "source": "/",
       "destination": "/web/index.html"
+    },
+    {
+      "source": "/measure",
+      "destination": "/web/measure/index.html"
+    },
+    {
+      "source": "/generate",
+      "destination": "/web/generate/index.html"
     }
   ],
   "headers": [
