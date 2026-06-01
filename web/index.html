@@ -100,6 +100,10 @@
         .scale-row {
             display: flex; align-items: center; gap: 8px; margin-top: 8px;
         }
+        .save-row {
+            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px;
+        }
+        .save-row button { width: 100%; min-width: 0; }
         #batchPanel {
             margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;
             color: white; font-size: 12px;
@@ -145,6 +149,7 @@
                 top: auto; left: 20px; right: 20px; bottom: 88px;
             }
             .batch-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .save-row { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -171,6 +176,12 @@
             <button id="editToggle" style="padding:8px 16px;border-radius:5px;border:none;background:#e74c3c;color:white;font-weight:bold;">
                 🔒 锁定标记
             </button>
+        </div>
+        <div class="save-row">
+            <button onclick="saveMarkedPoints({ notify: true })">保存打点</button>
+            <button onclick="exportMarkDraft()">导出打点JSON</button>
+            <input type="file" id="markImport" accept=".json,application/json" style="display:none;" onchange="importMarkDraft(event)">
+            <button onclick="document.getElementById('markImport').click()">导入打点JSON</button>
         </div>
         <div id="batchPanel">
             <div id="batchProgress">
@@ -305,6 +316,9 @@
         let sampleIdCounter = 1;
         const MARK_STORAGE_VERSION = 'semantic-face-v1';
         const MARK_STORAGE_KEY = `headModelManualSettings:${MARK_STORAGE_VERSION}`;
+        const MARK_DRAFT_VERSION = 'landmark-draft-v2';
+        const MARK_DRAFT_PREFIX = `headModelLandmarkDraft:${MARK_DRAFT_VERSION}:`;
+        let currentMarkDraftKey = '';
         const LEGACY_MARK_STORAGE_KEYS = ['headModelMarkedPoints'];
         const measurementRows = [
             { id: 'circumferenceValue', label: '头围' },
@@ -345,6 +359,57 @@
             return Object.fromEntries(Object.keys(pointNames).map(key => [key, serializePoint(markedPoints[key])]));
         }
 
+        function fileDraftKey(file) {
+            return `${MARK_DRAFT_PREFIX}file:${file.name}:${file.size}:${file.lastModified || 0}`;
+        }
+
+        function modelDraftKey(displayName) {
+            return `${MARK_DRAFT_PREFIX}model:${displayName || 'unknown'}`;
+        }
+
+        function buildMarkDraftPayload() {
+            return {
+                version: MARK_DRAFT_VERSION,
+                savedAt: new Date().toISOString(),
+                modelName: currentModelName || document.getElementById('modelSelect')?.value || '',
+                draftKey: currentMarkDraftKey,
+                scaleFactor: getScaleFactor(),
+                axes: { ...measurementAxes },
+                landmarks: serializeMarkedPoints(),
+                measurements: getMeasurementSnapshot(1),
+                status: getCurrentSample()?.status || '',
+                reviewReasons: getCurrentSample()?.reviewReasons || []
+            };
+        }
+
+        function readStoredMarkDraft(draftKey) {
+            if (!draftKey) return null;
+            try {
+                const stored = localStorage.getItem(draftKey);
+                if (!stored) return null;
+                const data = JSON.parse(stored);
+                return data.version === MARK_DRAFT_VERSION && data.landmarks ? data : null;
+            } catch (error) {
+                console.error('读取打点草稿失败:', error);
+                localStorage.removeItem(draftKey);
+                return null;
+            }
+        }
+
+        function applyStoredDraftToSample(sample) {
+            const draft = readStoredMarkDraft(sample?.draftKey);
+            if (!draft) return false;
+            sample.landmarks = draft.landmarks || {};
+            sample.measurements = draft.measurements || {};
+            sample.axes = draft.axes || null;
+            sample.reviewReasons = draft.reviewReasons || ['已恢复本地草稿'];
+            sample.status = draft.status || 'needs_review';
+            sample.detectedCount = Object.values(sample.landmarks).filter(Boolean).length;
+            sample.processed = true;
+            sample.manuallyEdited = true;
+            return true;
+        }
+
         function restoreMarkedPoints(points) {
             isRestoringSample = true;
             resetMarks({ silent: true });
@@ -352,7 +417,7 @@
                 if (pointNames[key] && point) placeMarker(key, deserializePoint(point), { silent: true });
             });
             isRestoringSample = false;
-            updateMeasurements({ skipSampleSync: true });
+            updateMeasurements({ skipSampleSync: true, skipDraftSave: true });
         }
 
         function getMeasurementSnapshot(decimals = 1) {
@@ -375,6 +440,7 @@
                 file,
                 fileName: file.name,
                 objectUrl: URL.createObjectURL(file),
+                draftKey: fileDraftKey(file),
                 status: 'ready',
                 landmarks: {},
                 measurements: {},
@@ -645,6 +711,7 @@
                 loading.style.display = 'block';
             }
             currentModelName = displayName || '未命名模型';
+            currentMarkDraftKey = options.draftKey || modelDraftKey(currentModelName);
 
             unloadCurrentModel();
             resetMarks({ silent: true });
@@ -745,7 +812,10 @@
             }
             modelSelect.value = option.value;
             document.getElementById('status').textContent = `正在检测 ${file.name}`;
-            loadObjModel(uploadedModelUrl, file.name, { useSavedMarks: false });
+            loadObjModel(uploadedModelUrl, file.name, {
+                useSavedMarks: true,
+                draftKey: fileDraftKey(file)
+            });
             event.target.value = '';
         }
 
@@ -758,7 +828,11 @@
             }
             const limitedFiles = files.slice(0, 50);
             batchSamples.forEach(sample => URL.revokeObjectURL(sample.objectUrl));
-            batchSamples = limitedFiles.map(createSample);
+            batchSamples = limitedFiles.map(file => {
+                const sample = createSample(file);
+                applyStoredDraftToSample(sample);
+                return sample;
+            });
             currentSampleId = null;
             renderBatchPanel();
             document.getElementById('status').textContent = `已添加 ${batchSamples.length} 个 OBJ 样本${files.length > 50 ? '，已按最多 50 个截断' : ''}`;
@@ -801,7 +875,8 @@
                     useSavedMarks: false,
                     autoDetect: true,
                     source: 'batch',
-                    background: true
+                    background: true,
+                    draftKey: sample.draftKey
                 });
                 const reviewReasons = sampleNeedsReview(result.detectionMeta);
                 sample.landmarks = result.snapshot?.landmarks || {};
@@ -854,7 +929,8 @@
                 await loadObjModel(sample.objectUrl, sample.fileName, {
                     useSavedMarks: false,
                     autoDetect: false,
-                    restoreLandmarks: sample.landmarks
+                    restoreLandmarks: sample.landmarks,
+                    draftKey: sample.draftKey
                 });
                 updateSampleFromCurrentView(sample, { status: sample.status, errorMessage: sample.errorMessage });
                 document.getElementById('status').textContent = `已加载 ${sample.fileName}，可手动校正点位`;
@@ -942,39 +1018,86 @@
             }
         }
 
-        function saveMarkedPoints() {
+        function saveMarkedPoints(options = {}) {
             cleanupOldMarkedPointStorage();
+            if (!currentMarkDraftKey) return;
+            try {
+                const payload = buildMarkDraftPayload();
+                localStorage.setItem(currentMarkDraftKey, JSON.stringify(payload));
+                if (options.notify) {
+                    document.getElementById('status').textContent = `已保存 ${payload.modelName || '当前模型'} 的打点草稿`;
+                }
+            } catch (error) {
+                console.error('保存打点失败:', error);
+                document.getElementById('status').textContent = '保存打点失败，可能是浏览器本地存储空间不足';
+            }
         }
 
         function loadMarkedPoints() {
             cleanupOldMarkedPointStorage();
-            return;
-            const fileName = document.getElementById('modelSelect').value;
-            const stored = null;
-
-            if (stored) {
-                try {
-                    const data = JSON.parse(stored);
-                    if (data.model === fileName && data.version === MARK_STORAGE_VERSION) {
-                        Object.keys(data.points).forEach(key => {
-                            if (data.points[key] && markedPoints[key] === null) {
-                                const p = new THREE.Vector3(
-                                    data.points[key].x,
-                                    data.points[key].y,
-                                    data.points[key].z
-                                );
-                                placeMarker(key, p);
-                            }
-                        });
-                        updateMeasurements();
-                        document.getElementById('status').textContent = '📥 已加载保存的标记点';
-                    } else if (data.model === fileName) {
-                        localStorage.removeItem(MARK_STORAGE_KEY);
-                    }
-                } catch (e) {
-                    console.error('加载标记点失败:', e);
-                    localStorage.removeItem(MARK_STORAGE_KEY);
+            if (!currentMarkDraftKey) return false;
+            const data = readStoredMarkDraft(currentMarkDraftKey);
+            if (data) {
+                restoreMarkedPoints(data.landmarks);
+                const sample = getCurrentSample();
+                if (sample) {
+                    sample.landmarks = serializeMarkedPoints();
+                    sample.measurements = getMeasurementSnapshot(1);
+                    sample.axes = data.axes || { ...measurementAxes };
+                    sample.processed = true;
+                    sample.manuallyEdited = true;
+                    if (sample.status !== 'failed') sample.status = data.status || 'needs_review';
+                    sample.reviewReasons = data.reviewReasons || sample.reviewReasons || [];
+                    renderBatchPanel();
                 }
+                document.getElementById('status').textContent = `已恢复 ${data.modelName || currentModelName} 的本地打点草稿`;
+                return true;
+            }
+            return false;
+        }
+
+        function exportMarkDraft() {
+            if (!mesh) {
+                document.getElementById('status').textContent = '请先加载或上传模型';
+                return;
+            }
+            updateMeasurements({ skipSampleSync: true });
+            const payload = buildMarkDraftPayload();
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+            const safeName = (payload.modelName || 'head-model').replace(/[\\/:*?"<>|]+/g, '_').replace(/\.obj$/i, '');
+            downloadBlob(blob, `${safeName}-打点草稿.json`);
+            saveMarkedPoints();
+            document.getElementById('status').textContent = '打点 JSON 已导出';
+        }
+
+        async function importMarkDraft(event) {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (!file) return;
+            if (!mesh) {
+                document.getElementById('status').textContent = '请先加载要恢复打点的模型';
+                return;
+            }
+            try {
+                const data = JSON.parse(await file.text());
+                const landmarks = data.landmarks || data.points;
+                if (!landmarks) throw new Error('JSON 中没有 landmarks 字段');
+                restoreMarkedPoints(landmarks);
+                const sample = getCurrentSample();
+                if (sample) {
+                    sample.landmarks = serializeMarkedPoints();
+                    sample.measurements = getMeasurementSnapshot(1);
+                    sample.axes = data.axes || { ...measurementAxes };
+                    sample.processed = true;
+                    sample.manuallyEdited = true;
+                    if (sample.status !== 'failed') sample.status = 'needs_review';
+                    renderBatchPanel();
+                }
+                saveMarkedPoints();
+                document.getElementById('status').textContent = `已导入 ${file.name}，并保存到当前模型草稿`;
+            } catch (error) {
+                console.error('导入打点 JSON 失败:', error);
+                document.getElementById('status').textContent = '导入失败，请确认是有效的打点 JSON';
             }
         }
 
@@ -1109,6 +1232,7 @@
                     if (sample.status !== 'failed') sample.status = 'needs_review';
                     renderBatchPanel();
                 }
+                saveMarkedPoints();
             }
         }
 
@@ -2837,6 +2961,9 @@
                     renderBatchPanel();
                 }
             }
+            if (!options.skipDraftSave && !isRestoringSample && !suppressSceneRendering && mesh) {
+                saveMarkedPoints();
+            }
         }
 
         function escapeExcelCell(value) {
@@ -3327,6 +3454,9 @@ ${overrides}</Types>`
         window.loadSampleForReview = loadSampleForReview;
         window.handleScaleChange = handleScaleChange;
         window.downloadExcelData = downloadExcelData;
+        window.saveMarkedPoints = saveMarkedPoints;
+        window.exportMarkDraft = exportMarkDraft;
+        window.importMarkDraft = importMarkDraft;
         window.setMarkMode = setMarkMode;
         window.resetMarks = resetMarks;
         window.autoDetectPoints = autoDetectPoints;
