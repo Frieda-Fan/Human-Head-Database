@@ -32,7 +32,8 @@ const MODEL_OPTIONS = {
   male: { label: "男性", url: "/web/generate/assets/models/asian-head.obj", filePrefix: "male-head-parametric" },
   female: { label: "女性", url: "/web/generate/assets/models/female-head.obj", filePrefix: "female-head-parametric" },
 };
-const MAX_PREVIEW_FACES = 16000;
+const MAX_PREVIEW_FACES = 4200;
+const MAX_PREVIEW_POINTS = 9200;
 const primaryParameters = Object.fromEntries(PRIMARY_PARAMETERS.map((item) => [item.key, item.value]));
 const state = primaryParameters;
 syncDerivedModelState();
@@ -155,6 +156,7 @@ function parseObj(text) {
     vertices: normalizedVertices,
     faces,
     previewFaces: createPreviewFaces(faces),
+    previewPoints: createPreviewPoints(normalizedVertices),
     bounds: getBounds(normalizedVertices),
     originalBounds: bounds,
     size,
@@ -169,6 +171,16 @@ function createPreviewFaces(faces) {
     previewFaces.push(faces[i]);
   }
   return previewFaces;
+}
+
+function createPreviewPoints(vertices) {
+  if (vertices.length <= MAX_PREVIEW_POINTS) return vertices.map((_, index) => index);
+  const stride = Math.ceil(vertices.length / MAX_PREVIEW_POINTS);
+  const previewPoints = [];
+  for (let i = 0; i < vertices.length; i += stride) {
+    previewPoints.push(i);
+  }
+  return previewPoints;
 }
 
 function getBounds(vertices) {
@@ -593,6 +605,35 @@ function drawEmptyState(message) {
   ctx.fillText(message, canvas.width * 0.5, canvas.height * 0.5);
 }
 
+function getPreviewScale(bounds = baseMesh.bounds) {
+  const spanX = bounds.max.x - bounds.min.x || 1;
+  const spanY = bounds.max.y - bounds.min.y || 1;
+  const spanZ = bounds.max.z - bounds.min.z || 1;
+  return 238 / Math.max(spanX, spanY, spanZ);
+}
+
+function drawPreviewBackdrop() {
+  const w = canvas.width;
+  const h = canvas.height;
+  const gradient = ctx.createLinearGradient(0, 0, 0, h);
+  gradient.addColorStop(0, "#f8fbfb");
+  gradient.addColorStop(1, "#e8eef0");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, w, h);
+
+  const glow = ctx.createRadialGradient(w * 0.5, h * 0.45, 0, w * 0.5, h * 0.45, Math.min(w, h) * 0.48);
+  glow.addColorStop(0, "rgba(13, 118, 111, 0.13)");
+  glow.addColorStop(0.62, "rgba(217, 110, 56, 0.06)");
+  glow.addColorStop(1, "rgba(255, 255, 255, 0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.beginPath();
+  ctx.ellipse(w * 0.5, h * 0.78, w * 0.18, h * 0.035, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(22, 25, 31, 0.1)";
+  ctx.fill();
+}
+
 function drawMesh() {
   if (!baseMesh) {
     drawEmptyState("正在加载基础头部 OBJ...");
@@ -600,53 +641,72 @@ function drawMesh() {
   }
 
   resizeCanvas();
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  mesh = generateMesh();
-  const projected = mesh.vertices.map(project);
-  const light = { x: -0.35, y: 0.58, z: 0.72 };
-  const sortedFaces = mesh.previewFaces
-    .map((face) => ({
-      face,
-      depth: (projected[face[0]].z + projected[face[1]].z + projected[face[2]].z) / 3,
-      normal: faceNormal(face, mesh.vertices),
-    }))
-    .sort((a, b) => a.depth - b.depth);
+  drawPreviewBackdrop();
 
-  sortedFaces.forEach(({ face, normal }) => {
-    const len = Math.hypot(normal.x, normal.y, normal.z) || 1;
-    const shade = clamp((normal.x * light.x + normal.y * light.y + normal.z * light.z) / len, -1, 1);
-    const red = Math.round(203 + shade * 32);
-    const green = Math.round(169 + shade * 24);
-    const blue = Math.round(144 + shade * 18);
+  mesh = generateMesh();
+  const fitScale = getPreviewScale(getBounds(mesh.vertices));
+  const previewVertices = mesh.vertices.map((vertex) => ({
+    x: vertex.x * fitScale,
+    y: vertex.y * fitScale,
+    z: vertex.z * fitScale,
+  }));
+  const projected = previewVertices.map(project);
+  const points = baseMesh.previewPoints
+    .map((index) => {
+      const point = projected[index];
+      const source = previewVertices[index];
+      const rim = clamp(Math.abs(source.x) / 118 + Math.abs(source.z) / 210, 0, 1);
+      return {
+        x: point.x,
+        y: point.y,
+        z: point.z,
+        shade: clamp(0.72 + point.z / 520 - rim * 0.18 + source.y / 900, 0.34, 1),
+      };
+    })
+    .sort((a, b) => a.z - b.z);
+
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  points.forEach((point) => {
+    const alpha = 0.28 + point.shade * 0.5;
+    const radius = (1.05 + point.shade * 1.2) * (window.devicePixelRatio || 1);
+    const red = Math.round(178 + point.shade * 48);
+    const green = Math.round(142 + point.shade * 42);
+    const blue = Math.round(119 + point.shade * 32);
     ctx.beginPath();
-    ctx.moveTo(projected[face[0]].x, projected[face[0]].y);
-    ctx.lineTo(projected[face[1]].x, projected[face[1]].y);
-    ctx.lineTo(projected[face[2]].x, projected[face[2]].y);
-    ctx.closePath();
-    ctx.fillStyle = `rgb(${red}, ${green}, ${blue})`;
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha})`;
     ctx.fill();
-    if (showWire) {
-      ctx.strokeStyle = "rgba(22, 25, 31, 0.13)";
-      ctx.lineWidth = 0.7;
-      ctx.stroke();
-    }
   });
+
+  if (showWire) {
+    ctx.strokeStyle = "rgba(8, 95, 89, 0.12)";
+    ctx.lineWidth = 0.65 * (window.devicePixelRatio || 1);
+    mesh.previewFaces.slice(0, 1300).forEach((face) => {
+      ctx.beginPath();
+      ctx.moveTo(projected[face[0]].x, projected[face[0]].y);
+      ctx.lineTo(projected[face[1]].x, projected[face[1]].y);
+      ctx.lineTo(projected[face[2]].x, projected[face[2]].y);
+      ctx.closePath();
+      ctx.stroke();
+    });
+  }
 
   const previewNote = mesh.previewFaces.length < mesh.faces.length ? ` · 预览 ${mesh.previewFaces.length} faces` : "";
   stats.textContent = `${MODEL_OPTIONS[selectedGender].label} · ${mesh.vertices.length} vertices · ${mesh.faces.length} faces${previewNote}`;
 }
 
 function exportObj() {
-  if (!mesh) mesh = generateMesh();
+  const generatedMesh = generateMesh();
   const lines = [
     `# Deformed from ${MODEL_OPTIONS[selectedGender].url}`,
     "# Units: millimeters",
     `o ${selectedGender}_head_parametric_deformed`,
   ];
-  mesh.vertices.forEach((v) => {
+  generatedMesh.vertices.forEach((v) => {
     lines.push(`v ${v.x.toFixed(4)} ${v.y.toFixed(4)} ${v.z.toFixed(4)}`);
   });
-  mesh.faces.forEach((face) => {
+  generatedMesh.faces.forEach((face) => {
     lines.push(`f ${face.map((index) => index + 1).join(" ")}`);
   });
   return lines.join("\n");
