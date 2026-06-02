@@ -92,6 +92,10 @@ function displayValue(item, value = state[item.key]) {
   return `${formatted}${item.unit || ""}`;
 }
 
+function targetOutputHeadHeight(value = state.headHeight) {
+  return value * 1.06;
+}
+
 function tragionWidthLimit() {
   const widthFromArc = state.coronalArc * 0.48;
   return clamp(widthFromArc, 120, state.headWidth);
@@ -348,6 +352,7 @@ function generateMesh() {
   vertices = applyLocalCalibrations(vertices);
   vertices = normalizeMainDimensions(vertices);
   vertices = applyLocalCalibrations(vertices);
+  vertices = normalizeMainDimensions(vertices);
   return {
     vertices,
     faces: baseMesh.faces,
@@ -369,7 +374,7 @@ function normalizeMainDimensions(vertices) {
   };
   const scale = {
     x: state.headWidth / size.x,
-    y: state.headHeight / size.y,
+    y: targetOutputHeadHeight() / size.y,
     z: state.headLen / size.z,
   };
 
@@ -383,13 +388,20 @@ function normalizeMainDimensions(vertices) {
 function getMainDimensionBounds(vertices) {
   const axisBounds = {
     x: spanForIndexes(vertices, getCoreIndexes("width"), "x"),
-    y: spanForIndexes(vertices, getCoreIndexes("height"), "y"),
+    y: getHeadHeightBounds(vertices),
     z: spanForIndexes(vertices, getCoreIndexes("length"), "z"),
   };
   return {
     min: { x: axisBounds.x.min, y: axisBounds.y.min, z: axisBounds.z.min },
     max: { x: axisBounds.x.max, y: axisBounds.y.max, z: axisBounds.z.max },
   };
+}
+
+function getHeadHeightBounds(vertices) {
+  const bounds = getBounds(vertices);
+  const min = bounds.min.y;
+  const max = bounds.max.y;
+  return { min, max, span: max - min || 1, center: (min + max) * 0.5, count: vertices.length };
 }
 
 function getBaseNormalized(vertex) {
@@ -432,15 +444,29 @@ function getCoreIndexes(axis) {
     .map(({ index }) => index);
 }
 
+function getHeadHeightIndexes(part) {
+  return baseMesh.vertices
+    .map((vertex, index) => ({ index, n: getBaseNormalized(vertex) }))
+    .filter(({ n }) => isHeadHeightPoint(n, part))
+    .map(({ index }) => index);
+}
+
+function isHeadHeightPoint(n, part) {
+  const side = Math.abs(n.x);
+  if (part === "crown") return side < 0.45 && n.y > 0.55 && n.z > -0.45 && n.z < 0.55;
+  if (part === "chin") return side < 0.32 && n.y < -0.5 && n.z > 0.18;
+  return false;
+}
+
 function spanForIndexes(vertices, indexes, axis) {
-  if (!indexes.length) return 0;
+  if (!indexes.length) return { min: 0, max: 1, span: 1, center: 0.5, count: 0 };
   let min = Infinity;
   let max = -Infinity;
   indexes.forEach((index) => {
     min = Math.min(min, vertices[index][axis]);
     max = Math.max(max, vertices[index][axis]);
   });
-  return { min, max, span: max - min || 1, center: (min + max) * 0.5 };
+  return { min, max, span: max - min || 1, center: (min + max) * 0.5, count: indexes.length };
 }
 
 function rangeWeight(value, innerMin, innerMax, outerMin, outerMax) {
@@ -596,7 +622,7 @@ function project(point) {
   let y = point.y;
   let z = point.z;
   const rotY = currentView === "side" ? Math.PI * 0.5 : currentView === "three" ? -0.58 : 0;
-  const rotX = currentView === "three" ? 0.12 : 0;
+  const rotX = 0;
   const cy = Math.cos(rotY);
   const sy = Math.sin(rotY);
   const cx = Math.cos(rotX);
@@ -606,10 +632,9 @@ function project(point) {
   const y1 = y * cx - z1 * sx;
   const z2 = y * sx + z1 * cx;
   const scale = Math.min(w, h) / 330;
-  const perspective = 1 / (1 + (z2 - 60) / 980);
   return {
-    x: w * 0.5 + x1 * scale * perspective,
-    y: h * 0.52 - y1 * scale * perspective,
+    x: w * 0.5 + x1 * scale,
+    y: h * 0.52 - y1 * scale,
     z: z2,
   };
 }
@@ -635,11 +660,11 @@ function drawEmptyState(message) {
   ctx.fillText(message, canvas.width * 0.5, canvas.height * 0.5);
 }
 
-function getPreviewScale(bounds = baseMesh.bounds) {
-  const spanX = bounds.max.x - bounds.min.x || 1;
-  const spanY = bounds.max.y - bounds.min.y || 1;
-  const spanZ = bounds.max.z - bounds.min.z || 1;
-  return 238 / Math.max(spanX, spanY, spanZ);
+function getPreviewScale() {
+  const widthMax = metaFor("headWidth").max;
+  const heightMax = targetOutputHeadHeight(metaFor("headHeight").max);
+  const lengthMax = metaFor("headLen").max;
+  return 238 / Math.max(widthMax, heightMax, lengthMax);
 }
 
 function drawPreviewBackdrop() {
@@ -674,7 +699,7 @@ function drawMesh() {
   drawPreviewBackdrop();
 
   mesh = generateMesh();
-  const fitScale = getPreviewScale(getBounds(mesh.vertices));
+  const fitScale = getPreviewScale();
   const previewVertices = mesh.vertices.map((vertex) => ({
     x: vertex.x * fitScale,
     y: vertex.y * fitScale,
