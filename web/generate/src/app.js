@@ -1,41 +1,32 @@
 const PRIMARY_PARAMETERS = [
-  { group: "头部整体", key: "headCirc", label: "头围", min: 500, max: 620, value: 560, unit: "mm" },
-  { group: "头部整体", key: "headLen", label: "头长", min: 165, max: 215, value: 190, unit: "mm" },
-  { group: "头部整体", key: "headWidth", label: "头宽", min: 130, max: 175, value: 155, unit: "mm" },
-  { group: "头部整体", key: "headHeight", label: "头高", min: 190, max: 260, value: 225, unit: "mm" },
-  { group: "脸型比例", key: "faceWidth", label: "面宽", min: 120, max: 165, value: 142, unit: "mm" },
-  { group: "五官比例", key: "pupilDistance", label: "瞳孔间距", min: 55, max: 75, value: 64, unit: "mm" },
-  { group: "五官比例", key: "noseHeight", label: "鼻高", min: 42, max: 70, value: 55, unit: "mm" },
-  { group: "五官比例", key: "noseWidth", label: "鼻宽", min: 28, max: 48, value: 36, unit: "mm" },
-  { group: "耳部参数", key: "earLength", label: "容貌耳长", min: 52, max: 78, value: 64, unit: "mm" },
-  { group: "耳部参数", key: "earWidth", label: "容貌耳宽", min: 26, max: 44, value: 34, unit: "mm" },
+  { group: "头部尺寸", key: "headCirc", label: "1 头围", min: 500, max: 620, value: 560, unit: "mm", step: 1 },
+  { group: "头部尺寸", key: "sagittalArc", label: "5 头矢状弧（纵弧）", min: 240, max: 360, value: 291, unit: "mm", step: 1 },
+  { group: "头部尺寸", key: "coronalArc", label: "6 耳屏间弧（横弧）", min: 240, max: 360, value: 291, unit: "mm", step: 1 },
+  { group: "头部尺寸", key: "headLen", label: "3 头长", min: 165, max: 215, value: 190, unit: "mm", step: 1 },
+  { group: "头部尺寸", key: "headWidth", label: "4 头宽", min: 130, max: 175, value: 155, unit: "mm", step: 1 },
+  { group: "头部尺寸", key: "headHeight", label: "7 头高", min: 190, max: 260, value: 225, unit: "mm", step: 1 },
+  { group: "面部与比例", key: "pupilDistance", label: "16 瞳距", min: 55, max: 75, value: 64, unit: "mm", step: 1 },
+  { group: "面部与比例", key: "headEarHeight", label: "22 头耳高", min: 150, max: 235, value: 203, unit: "mm", step: 1 },
+  { group: "面部与比例", key: "earNoseDistance", label: "23 耳鼻距", min: 70, max: 120, value: 86, unit: "mm", step: 1 },
+  { group: "面部与比例", key: "headHeightWidthRatio", label: "头高/头宽", min: 1.15, max: 1.75, value: 1.45, unit: "", step: 0.01 },
 ];
 
 const INTERNAL_MODEL_PARAMETERS = [
   { key: "faceLen", label: "形态面长", min: 100, max: 150, value: 125, unit: "mm" },
-  { key: "jawWidth", label: "两下颌角间宽", min: 95, max: 145, value: 118, unit: "mm" },
+  { key: "jawWidth", label: "下颌宽", min: 95, max: 145, value: 118, unit: "mm" },
   { key: "subnasaleToChin", label: "鼻下至颏下点距", min: 52, max: 90, value: 70, unit: "mm" },
   { key: "eyeEarHeight", label: "眼耳高", min: 10, max: 45, value: 25, unit: "mm" },
 ];
 
-const DERIVED_PARAMETERS = [
-  { group: "自动推导参数", key: "sagittalArc", label: "头矢状弧", unit: "mm" },
-  { group: "自动推导参数", key: "coronalArc", label: "耳屏间弧（头冠状弧）", unit: "mm" },
-  { group: "自动推导参数", key: "noseToOcciput", label: "鼻尖点至枕后点距", unit: "mm" },
-  { group: "自动推导参数", key: "tragusToOcciput", label: "耳屏至枕后点距", unit: "mm" },
-  { group: "自动推导参数", key: "tragusWidth", label: "两耳屏间宽", unit: "mm" },
-  { group: "自动推导参数", key: "browToChinArc", label: "眉间弧颏顶长", unit: "mm" },
-  { group: "自动推导参数", key: "coronalCirc", label: "头冠状围", unit: "mm" },
-  { group: "自动推导参数", key: "headEarHeight", label: "头耳高", unit: "mm" },
-  { group: "自动推导参数", key: "tragusToNasion", label: "耳屏鼻根长", unit: "mm" },
-  { group: "自动推导参数", key: "tragusToChin", label: "耳屏颏下长", unit: "mm" },
-  { group: "自动推导参数", key: "tragusForeheadArc", label: "耳屏点间额弧长", unit: "mm" },
-  { group: "自动推导参数", key: "tragusChinArc", label: "耳屏点间颏下弧长", unit: "mm" },
-  { group: "自动推导参数", key: "vertexToBrow", label: "头顶点至眉间点距", unit: "mm" },
-  { group: "自动推导参数", key: "vertexToNose", label: "头顶点至鼻尖点距", unit: "mm" },
+const DERIVED_MODEL_PARAMETERS = [
+  { key: "faceWidth", min: 120, max: 165, value: 142 },
+  { key: "noseHeight", min: 42, max: 70, value: 55 },
+  { key: "noseWidth", min: 28, max: 48, value: 36 },
+  { key: "earLength", min: 52, max: 78, value: 64 },
+  { key: "earWidth", min: 26, max: 44, value: 34 },
 ];
 
-const MODEL_PARAMETER_META = [...PRIMARY_PARAMETERS, ...INTERNAL_MODEL_PARAMETERS];
+const MODEL_PARAMETER_META = [...PRIMARY_PARAMETERS, ...INTERNAL_MODEL_PARAMETERS, ...DERIVED_MODEL_PARAMETERS];
 
 const MODEL_OPTIONS = {
   male: { label: "男性", url: "/web/generate/assets/models/asian-head.obj", filePrefix: "male-head-parametric" },
@@ -44,6 +35,7 @@ const MODEL_OPTIONS = {
 const MAX_PREVIEW_FACES = 16000;
 const primaryParameters = Object.fromEntries(PRIMARY_PARAMETERS.map((item) => [item.key, item.value]));
 const state = primaryParameters;
+syncDerivedModelState();
 const canvas = document.querySelector("#viewer");
 const ctx = canvas.getContext("2d");
 const controls = document.querySelector("#controls");
@@ -59,6 +51,38 @@ let lastCanvasSize = { width: 0, height: 0 };
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function metaFor(key) {
+  return MODEL_PARAMETER_META.find((item) => item.key === key);
+}
+
+function clampToMeta(key, value) {
+  const meta = metaFor(key);
+  if (!meta) return value;
+  return clamp(value, meta.min, meta.max);
+}
+
+function displayValue(item, value = state[item.key]) {
+  const decimals = item.step && item.step < 1 ? 2 : 0;
+  const formatted = Number(value).toFixed(decimals).replace(/\.?0+$/, "");
+  return `${formatted}${item.unit || ""}`;
+}
+
+function syncDerivedModelState() {
+  state.faceWidth = clampToMeta("faceWidth", state.headWidth * 0.9 + (state.pupilDistance - 64) * 0.35);
+  state.noseHeight = clampToMeta("noseHeight", state.earNoseDistance * 0.52 + (state.headLen - 190) * 0.08);
+  state.noseWidth = clampToMeta("noseWidth", state.headWidth * 0.22 + (state.pupilDistance - 64) * 0.12);
+  state.earLength = clampToMeta("earLength", (state.headHeight - state.headEarHeight) * 0.7 + 48);
+  state.earWidth = clampToMeta("earWidth", state.earLength * 0.52);
+}
+
+function syncRatioFromDimensions() {
+  state.headHeightWidthRatio = Number((state.headHeight / state.headWidth).toFixed(2));
+}
+
+function syncDimensionFromRatio() {
+  state.headHeight = Math.round(clampToMeta("headHeight", state.headWidth * state.headHeightWidthRatio));
 }
 
 function smoothstep(edge0, edge1, value) {
@@ -77,42 +101,12 @@ function normalizeParam(key, value = state[key]) {
 }
 
 function computeInternalModelParameters(primary) {
-  // TODO: Replace these internal helper estimates with real anthropometric statistics.
   return {
-    faceLen: primary.headHeight * 0.56,
+    faceLen: primary.sagittalArc * 0.43 + primary.headLen * 0.08,
     jawWidth: primary.faceWidth * 0.83,
-    subnasaleToChin: primary.noseHeight * 0.72 + primary.headHeight * 0.14,
-    eyeEarHeight: primary.earLength * 0.34 + (primary.headHeight - 225) * 0.04,
+    subnasaleToChin: primary.earNoseDistance * 0.48 + primary.headHeight * 0.12,
+    eyeEarHeight: primary.headHeight - primary.headEarHeight,
   };
-}
-
-function computeDerivedParameters(primary) {
-  const internal = computeInternalModelParameters(primary);
-  // TODO: Replace these first-pass proportional rules with real statistical formulas.
-  return {
-    sagittalArc: primary.headCirc * 0.52,
-    coronalArc: primary.headCirc * 0.52,
-    noseToOcciput: primary.headLen * 0.72,
-    tragusToOcciput: primary.headLen * 0.42,
-    tragusWidth: primary.headWidth * 0.92,
-    browToChinArc: internal.faceLen * 1.08,
-    coronalCirc: primary.headCirc * 0.48,
-    headEarHeight: primary.headHeight - internal.eyeEarHeight,
-    tragusToNasion: primary.faceWidth * 0.55,
-    tragusToChin: internal.faceLen * 0.72,
-    tragusForeheadArc: primary.headCirc * 0.3,
-    tragusChinArc: primary.headCirc * 0.36,
-    vertexToBrow: primary.headHeight * 0.32,
-    vertexToNose: primary.headHeight * 0.52,
-  };
-}
-
-function getDerivedState() {
-  return computeDerivedParameters(primaryParameters);
-}
-
-function formatMm(value) {
-  return `${Math.round(value)}mm`;
 }
 
 function parseObj(text) {
@@ -208,38 +202,22 @@ function buildControls() {
     row.className = "control-row";
     row.innerHTML = `
       <span class="control-label">${item.label}</span>
-      <span class="control-value" data-value="${item.key}">${item.value}${item.unit}</span>
-      <input type="range" min="${item.min}" max="${item.max}" value="${item.value}" step="1" data-key="${item.key}" aria-label="${item.label}" />
+      <span class="control-value" data-value="${item.key}">${displayValue(item)}</span>
+      <input type="range" min="${item.min}" max="${item.max}" value="${state[item.key]}" step="${item.step || 1}" data-key="${item.key}" aria-label="${item.label}" />
     `;
     fragment.appendChild(row);
   });
 
-  const details = document.createElement("details");
-  details.className = "derived-panel";
-  details.innerHTML = `
-    <summary>自动推导参数</summary>
-    <div class="derived-list"></div>
-  `;
-  const list = details.querySelector(".derived-list");
-  DERIVED_PARAMETERS.forEach((item) => {
-    const row = document.createElement("div");
-    row.className = "derived-row";
-    row.innerHTML = `
-      <span class="control-label">${item.label}</span>
-      <span class="control-value" data-derived-value="${item.key}">0${item.unit}</span>
-    `;
-    list.appendChild(row);
-  });
-  fragment.appendChild(details);
   controls.appendChild(fragment);
-  updateDerivedDisplay();
 }
 
-function updateDerivedDisplay() {
-  const derived = getDerivedState();
-  DERIVED_PARAMETERS.forEach((item) => {
-    const value = controls.querySelector(`[data-derived-value="${item.key}"]`);
-    if (value) value.textContent = formatMm(derived[item.key]);
+function updateControlDisplay(keys = PRIMARY_PARAMETERS.map((item) => item.key)) {
+  keys.forEach((key) => {
+    const item = PRIMARY_PARAMETERS.find((param) => param.key === key);
+    const input = controls.querySelector(`[data-key="${key}"]`);
+    const value = controls.querySelector(`[data-value="${key}"]`);
+    if (input) input.value = state[key];
+    if (value && item) value.textContent = displayValue(item);
   });
 }
 
@@ -272,6 +250,11 @@ function deformVertex(vertex) {
   const headLen = normalizeParam("headLen");
   const headWidth = normalizeParam("headWidth");
   const headHeight = normalizeParam("headHeight");
+  const sagittalArc = normalizeParam("sagittalArc");
+  const coronalArc = normalizeParam("coronalArc");
+  const headEarHeight = normalizeParam("headEarHeight");
+  const earNoseDistance = normalizeParam("earNoseDistance");
+  const heightWidthRatio = normalizeParam("headHeightWidthRatio");
   const faceWidth = normalizeParam("faceWidth");
   const jawWidth = normalizeParam("jawWidth", internal.jawWidth);
   const noseHeight = normalizeParam("noseHeight");
@@ -288,7 +271,7 @@ function deformVertex(vertex) {
 
   const faceVerticalStretch = faceMask * faceLen * 0.075;
   const lowerVerticalStretch = lower * (subnasaleToChin * 0.08 + faceLen * 0.025);
-  const crownLift = crownMask * (headHeight * 4.2 + headCirc * 2.6);
+  const crownLift = crownMask * (headHeight * 4.2 + headCirc * 2.6 + sagittalArc * 2.1 + heightWidthRatio * 1.4);
   const browShift = eyeMask * eyeEarHeight * 2.3;
   const noseLevelShift = noseMask * noseHeight * 1.5;
 
@@ -296,8 +279,8 @@ function deformVertex(vertex) {
   let y = vertex.y * yScale;
   let z = vertex.z * zScale;
 
-  x *= 1 + crownMask * headCirc * 0.035;
-  x *= 1 + faceMask * (faceWidth * 0.085 + headCirc * 0.012);
+  x *= 1 + crownMask * (headCirc * 0.028 + coronalArc * 0.04);
+  x *= 1 + faceMask * (faceWidth * 0.085 + headCirc * 0.012 + coronalArc * 0.018);
   x *= 1 + jawMask * jawWidth * 0.13;
   x *= 1 + noseMask * (noseWidth * 0.12);
   x += Math.sign(nx) * eyeMask * pupilDistance * 3.8;
@@ -306,12 +289,12 @@ function deformVertex(vertex) {
   y -= lowerVerticalStretch * 7.5;
   y += crownLift;
   y += browShift + noseLevelShift;
-  y -= earMask * eyeEarHeight * 2.6;
+  y -= earMask * (eyeEarHeight * 2.6 + headEarHeight * 2.2);
 
-  z *= 1 + front * headLen * 0.025 + back * (headLen * 0.035 + headCirc * 0.015);
-  z += noseMask * noseHeight * 9.5;
+  z *= 1 + front * (headLen * 0.02 + sagittalArc * 0.028) + back * (headLen * 0.032 + headCirc * 0.012 + sagittalArc * 0.03);
+  z += noseMask * (noseHeight * 8.8 + earNoseDistance * 4.8);
   z += chinMask * (subnasaleToChin * 4.8 + faceLen * 2.2);
-  z -= occiputMask * (headLen * 8.5 + headCirc * 3.0);
+  z -= occiputMask * (headLen * 8.2 + headCirc * 2.5 + sagittalArc * 5.6);
   z += upper * front * (headCirc * 3.2 + headHeight * 2.2);
 
   return { x, y, z };
@@ -686,12 +669,9 @@ function downloadObj() {
 function resetParameters() {
   PRIMARY_PARAMETERS.forEach((item) => {
     state[item.key] = item.value;
-    const input = controls.querySelector(`[data-key="${item.key}"]`);
-    const value = controls.querySelector(`[data-value="${item.key}"]`);
-    input.value = item.value;
-    value.textContent = `${item.value}${item.unit}`;
   });
-  updateDerivedDisplay();
+  syncDerivedModelState();
+  updateControlDisplay();
   drawMesh();
 }
 
@@ -728,8 +708,18 @@ controls.addEventListener("input", (event) => {
   if (!input) return;
   const key = input.dataset.key;
   state[key] = Number(input.value);
-  controls.querySelector(`[data-value="${key}"]`).textContent = `${input.value}mm`;
-  updateDerivedDisplay();
+  if (key === "headHeightWidthRatio") {
+    syncDimensionFromRatio();
+    syncDerivedModelState();
+    updateControlDisplay(["headHeightWidthRatio", "headHeight"]);
+  } else if (key === "headHeight" || key === "headWidth") {
+    syncRatioFromDimensions();
+    syncDerivedModelState();
+    updateControlDisplay([key, "headHeightWidthRatio"]);
+  } else {
+    syncDerivedModelState();
+    updateControlDisplay([key]);
+  }
   drawMesh();
 });
 
@@ -759,3 +749,4 @@ document.querySelectorAll("[data-view]").forEach((button) => {
 });
 
 window.addEventListener("resize", drawMesh);
+
