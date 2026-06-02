@@ -310,10 +310,35 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
-.control-row input[type="range"] {
+.control-inputs {
   grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  gap: 10px;
+  align-items: center;
+}
+
+.control-row input[type="range"] {
   width: 100%;
   accent-color: var(--accent);
+}
+
+.control-row input[type="number"] {
+  width: 92px;
+  height: 34px;
+  padding: 0 8px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.control-row input[type="number"]:focus {
+  border-color: var(--accent);
+  outline: 2px solid rgba(13, 118, 111, 0.14);
+  outline-offset: 0;
 }
 
 .derived-panel {

@@ -1,3 +1,25 @@
+const RANGE_EXPANSION = 0.2;
+
+function decimalsForStep(step = 1) {
+  const text = String(step);
+  return text.includes(".") ? text.split(".")[1].length : 0;
+}
+
+function roundForStep(value, step = 1) {
+  return Number(value.toFixed(decimalsForStep(step)));
+}
+
+function expandParameterRange(item) {
+  const span = item.max - item.min;
+  const extra = span * RANGE_EXPANSION * 0.5;
+  const step = item.step || 1;
+  return {
+    ...item,
+    min: roundForStep(item.min - extra, step),
+    max: roundForStep(item.max + extra, step),
+  };
+}
+
 const PRIMARY_PARAMETERS = [
   { group: "头部尺寸", key: "headCirc", label: "1 头围", min: 500, max: 620, value: 560, unit: "mm", step: 1 },
   { group: "头部尺寸", key: "sagittalArc", label: "5 头矢状弧（纵弧）", min: 240, max: 360, value: 291, unit: "mm", step: 1 },
@@ -9,14 +31,14 @@ const PRIMARY_PARAMETERS = [
   { group: "面部与比例", key: "headEarHeight", label: "22 头耳高", min: 150, max: 235, value: 203, unit: "mm", step: 1 },
   { group: "面部与比例", key: "earNoseDistance", label: "23 耳鼻距", min: 70, max: 120, value: 86, unit: "mm", step: 1 },
   { group: "面部与比例", key: "headHeightWidthRatio", label: "头高/头宽", min: 1.15, max: 1.75, value: 1.45, unit: "", step: 0.01 },
-];
+].map(expandParameterRange);
 
 const INTERNAL_MODEL_PARAMETERS = [
   { key: "faceLen", label: "形态面长", min: 100, max: 150, value: 125, unit: "mm" },
   { key: "jawWidth", label: "下颌宽", min: 95, max: 145, value: 118, unit: "mm" },
   { key: "subnasaleToChin", label: "鼻下至颏下点距", min: 52, max: 90, value: 70, unit: "mm" },
   { key: "eyeEarHeight", label: "眼耳高", min: 10, max: 45, value: 25, unit: "mm" },
-];
+].map(expandParameterRange);
 
 const DERIVED_MODEL_PARAMETERS = [
   { key: "faceWidth", min: 120, max: 165, value: 142 },
@@ -24,7 +46,7 @@ const DERIVED_MODEL_PARAMETERS = [
   { key: "noseWidth", min: 28, max: 48, value: 36 },
   { key: "earLength", min: 52, max: 78, value: 64 },
   { key: "earWidth", min: 26, max: 44, value: 34 },
-];
+].map(expandParameterRange);
 
 const MODEL_PARAMETER_META = [...PRIMARY_PARAMETERS, ...INTERNAL_MODEL_PARAMETERS, ...DERIVED_MODEL_PARAMETERS];
 
@@ -221,7 +243,10 @@ function buildControls() {
     row.innerHTML = `
       <span class="control-label">${item.label}</span>
       <span class="control-value" data-value="${item.key}">${displayValue(item)}</span>
-      <input type="range" min="${item.min}" max="${item.max}" value="${state[item.key]}" step="${item.step || 1}" data-key="${item.key}" aria-label="${item.label}" />
+      <div class="control-inputs">
+        <input type="range" min="${item.min}" max="${item.max}" value="${state[item.key]}" step="${item.step || 1}" data-key="${item.key}" data-control="range" aria-label="${item.label}" />
+        <input type="number" min="${item.min}" max="${item.max}" value="${state[item.key]}" step="${item.step || 1}" data-key="${item.key}" data-control="number" aria-label="${item.label} 手动输入" />
+      </div>
     `;
     fragment.appendChild(row);
   });
@@ -232,9 +257,11 @@ function buildControls() {
 function updateControlDisplay(keys = PRIMARY_PARAMETERS.map((item) => item.key)) {
   keys.forEach((key) => {
     const item = PRIMARY_PARAMETERS.find((param) => param.key === key);
-    const input = controls.querySelector(`[data-key="${key}"]`);
+    const inputs = controls.querySelectorAll(`[data-key="${key}"]`);
     const value = controls.querySelector(`[data-value="${key}"]`);
-    if (input) input.value = state[key];
+    inputs.forEach((input) => {
+      input.value = state[key];
+    });
     if (value && item) value.textContent = displayValue(item);
   });
 }
@@ -762,15 +789,13 @@ async function loadBaseModel(gender = selectedGender) {
   }
 }
 
-buildControls();
-drawMesh();
-loadBaseModel();
-
-controls.addEventListener("input", (event) => {
-  const input = event.target.closest("input[type='range']");
-  if (!input) return;
-  const key = input.dataset.key;
-  state[key] = Number(input.value);
+function applyParameterChange(key, rawValue) {
+  const item = PRIMARY_PARAMETERS.find((param) => param.key === key);
+  if (!item) return;
+  if (rawValue === "") return;
+  const numericValue = Number(rawValue);
+  if (!Number.isFinite(numericValue)) return;
+  state[key] = clamp(numericValue, item.min, item.max);
   if (key === "headHeightWidthRatio") {
     syncDimensionFromRatio();
     syncDerivedModelState();
@@ -784,6 +809,22 @@ controls.addEventListener("input", (event) => {
     updateControlDisplay([key]);
   }
   drawMesh();
+}
+
+buildControls();
+drawMesh();
+loadBaseModel();
+
+controls.addEventListener("input", (event) => {
+  const input = event.target.closest("input[data-control='range']");
+  if (!input) return;
+  applyParameterChange(input.dataset.key, input.value);
+});
+
+controls.addEventListener("change", (event) => {
+  const input = event.target.closest("input[data-control='number']");
+  if (!input) return;
+  applyParameterChange(input.dataset.key, input.value);
 });
 
 document.querySelector("#downloadButton").addEventListener("click", downloadObj);
