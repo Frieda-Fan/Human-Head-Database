@@ -93,7 +93,11 @@ function displayValue(item, value = state[item.key]) {
 }
 
 function targetOutputHeadHeight(value = state.headHeight) {
-  return value * 1.06;
+  return value * 1.2;
+}
+
+function targetOutputHeadLength(value = state.headLen) {
+  return value * 1.15;
 }
 
 function tragionWidthLimit() {
@@ -329,7 +333,7 @@ function deformVertex(vertex) {
   x *= 1 + faceMask * (faceWidth * 0.085 + headCirc * 0.012 + coronalArc * 0.018);
   x *= 1 + jawMask * jawWidth * 0.13;
   x *= 1 + noseMask * (noseWidth * 0.12);
-  x += Math.sign(nx) * eyeMask * pupilDistance * 3.8;
+  x += Math.sign(nx) * eyeMask * pupilDistance * 3.2;
 
   y += Math.sign(ny || -1) * Math.abs(vertex.y) * faceVerticalStretch;
   y -= lowerVerticalStretch * 7.5;
@@ -375,7 +379,7 @@ function normalizeMainDimensions(vertices) {
   const scale = {
     x: state.headWidth / size.x,
     y: targetOutputHeadHeight() / size.y,
-    z: state.headLen / size.z,
+    z: targetOutputHeadLength() / size.z,
   };
 
   return vertices.map((vertex) => ({
@@ -389,7 +393,7 @@ function getMainDimensionBounds(vertices) {
   const axisBounds = {
     x: spanForIndexes(vertices, getCoreIndexes("width"), "x"),
     y: getHeadHeightBounds(vertices),
-    z: spanForIndexes(vertices, getCoreIndexes("length"), "z"),
+    z: getHeadLengthBounds(vertices),
   };
   return {
     min: { x: axisBounds.x.min, y: axisBounds.y.min, z: axisBounds.z.min },
@@ -401,6 +405,13 @@ function getHeadHeightBounds(vertices) {
   const bounds = getBounds(vertices);
   const min = bounds.min.y;
   const max = bounds.max.y;
+  return { min, max, span: max - min || 1, center: (min + max) * 0.5, count: vertices.length };
+}
+
+function getHeadLengthBounds(vertices) {
+  const bounds = getBounds(vertices);
+  const min = bounds.min.z;
+  const max = bounds.max.z;
   return { min, max, span: max - min || 1, center: (min + max) * 0.5, count: vertices.length };
 }
 
@@ -663,7 +674,7 @@ function drawEmptyState(message) {
 function getPreviewScale() {
   const widthMax = metaFor("headWidth").max;
   const heightMax = targetOutputHeadHeight(metaFor("headHeight").max);
-  const lengthMax = metaFor("headLen").max;
+  const lengthMax = targetOutputHeadLength(metaFor("headLen").max);
   return 238 / Math.max(widthMax, heightMax, lengthMax);
 }
 
