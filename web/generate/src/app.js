@@ -70,9 +70,15 @@ function displayValue(item, value = state[item.key]) {
   return `${formatted}${item.unit || ""}`;
 }
 
+function tragionWidthLimit() {
+  const widthFromArc = state.coronalArc * 0.48;
+  return clamp(widthFromArc, 120, state.headWidth);
+}
+
 function syncDerivedModelState() {
-  state.faceWidth = clampToMeta("faceWidth", state.headWidth * 0.9 + (state.pupilDistance - 64) * 0.35);
-  state.noseHeight = clampToMeta("noseHeight", state.earNoseDistance * 0.52 + (state.headLen - 190) * 0.08);
+  const derivedFaceWidth = state.headWidth * 0.9 + (state.pupilDistance - 64) * 0.35;
+  state.faceWidth = clampToMeta("faceWidth", Math.min(derivedFaceWidth, tragionWidthLimit()));
+  state.noseHeight = clampToMeta("noseHeight", metaFor("noseHeight").value + (state.headLen - 190) * 0.08);
   state.noseWidth = clampToMeta("noseWidth", state.headWidth * 0.22 + (state.pupilDistance - 64) * 0.12);
   state.earLength = clampToMeta("earLength", (state.headHeight - state.headEarHeight) * 0.7 + 48);
   state.earWidth = clampToMeta("earWidth", state.earLength * 0.52);
@@ -265,7 +271,6 @@ function deformVertex(vertex) {
   const sagittalArc = normalizeParam("sagittalArc");
   const coronalArc = normalizeParam("coronalArc");
   const headEarHeight = normalizeParam("headEarHeight");
-  const earNoseDistance = normalizeParam("earNoseDistance");
   const heightWidthRatio = normalizeParam("headHeightWidthRatio");
   const faceWidth = normalizeParam("faceWidth");
   const jawWidth = normalizeParam("jawWidth", internal.jawWidth);
@@ -275,7 +280,6 @@ function deformVertex(vertex) {
   const pupilDistance = normalizeParam("pupilDistance");
   const earLength = normalizeParam("earLength");
   const earWidth = normalizeParam("earWidth");
-  const eyeEarHeight = normalizeParam("eyeEarHeight", internal.eyeEarHeight);
 
   const xScale = state.headWidth / baseMesh.size.x;
   const yScale = state.headHeight / baseMesh.size.y;
@@ -284,7 +288,6 @@ function deformVertex(vertex) {
   const faceVerticalStretch = faceMask * faceLen * 0.075;
   const lowerVerticalStretch = lower * (subnasaleToChin * 0.08 + faceLen * 0.025);
   const crownLift = crownMask * (headHeight * 4.2 + headCirc * 2.6 + sagittalArc * 2.1 + heightWidthRatio * 1.4);
-  const browShift = eyeMask * eyeEarHeight * 2.3;
   const noseLevelShift = noseMask * noseHeight * 1.5;
 
   let x = vertex.x * xScale;
@@ -300,11 +303,11 @@ function deformVertex(vertex) {
   y += Math.sign(ny || -1) * Math.abs(vertex.y) * faceVerticalStretch;
   y -= lowerVerticalStretch * 7.5;
   y += crownLift;
-  y += browShift + noseLevelShift;
-  y -= earMask * (eyeEarHeight * 2.6 + headEarHeight * 2.2);
+  y += noseLevelShift;
+  y -= earMask * headEarHeight * 2.2;
 
   z *= 1 + front * (headLen * 0.02 + sagittalArc * 0.028) + back * (headLen * 0.032 + headCirc * 0.012 + sagittalArc * 0.03);
-  z += noseMask * (noseHeight * 8.8 + earNoseDistance * 4.8);
+  z += noseMask * noseHeight * 8.8;
   z += chinMask * (subnasaleToChin * 4.8 + faceLen * 2.2);
   z -= occiputMask * (headLen * 8.2 + headCirc * 2.5 + sagittalArc * 5.6);
   z += upper * front * (headCirc * 3.2 + headHeight * 2.2);
