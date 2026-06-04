@@ -13,6 +13,18 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_GET(self):
+        route_map = {
+            '/': '/web/index.html',
+            '/measure': '/web/modules/measure/index.html',
+            '/measure/': '/web/modules/measure/index.html',
+            '/measure/index.html': '/web/modules/measure/index.html',
+            '/generate': '/web/modules/generate/index.html',
+            '/generate/': '/web/modules/generate/index.html',
+            '/generate/index.html': '/web/modules/generate/index.html',
+        }
+        parsed_path = urllib.parse.urlparse(self.path).path
+        if parsed_path in route_map:
+            self.path = route_map[parsed_path]
         # 处理模型列表请求
         if self.path == '/web/api/list_models.py':
             self.send_response(200)

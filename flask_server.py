@@ -20,6 +20,18 @@ def list_models():
 def serve_web(path):
     return send_from_directory('web', path)
 
+@app.route('/measure')
+@app.route('/measure/')
+@app.route('/measure/index.html')
+def measure():
+    return send_from_directory('web/modules/measure', 'index.html')
+
+@app.route('/generate')
+@app.route('/generate/')
+@app.route('/generate/index.html')
+def generate():
+    return send_from_directory('web/modules/generate', 'index.html')
+
 @app.route('/models/<path:path>')
 def serve_models(path):
     return send_from_directory('models', path)

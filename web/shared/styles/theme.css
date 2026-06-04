@@ -1,0 +1,34 @@
+:root {
+  color-scheme: light;
+  font-family:
+    Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --ink: #151922;
+  --muted: #697386;
+  --line: #dfe5eb;
+  --panel: rgba(255, 255, 255, 0.88);
+  --soft: #f4f7f8;
+  --accent: #0d766f;
+  --accent-strong: #085f59;
+  --warm: #d96e38;
+  --shadow: 0 24px 70px rgba(17, 31, 44, 0.14);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background:
+    linear-gradient(120deg, rgba(13, 118, 111, 0.1), transparent 34%),
+    linear-gradient(300deg, rgba(217, 110, 56, 0.11), transparent 42%),
+    #eef3f4;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}

@@ -5,16 +5,14 @@
 ## 项目结构
 
 ```text
-head-model/
+web/modules/generate/
   index.html
+  generator.js
+  generator.css
   README.md
-  src/
-    app.js
-    styles.css
-  assets/
-    models/
-      asian-head.obj
-      female-head.obj
+  assets/models/
+    asian-head.obj
+    female-head.obj
 ```
 
 ## 运行方式
@@ -28,7 +26,7 @@ python -m http.server 4180 --bind 127.0.0.1
 然后打开：
 
 ```text
-http://127.0.0.1:4180/index.html
+http://127.0.0.1:8000/web/modules/generate/index.html
 ```
 
 ## 功能

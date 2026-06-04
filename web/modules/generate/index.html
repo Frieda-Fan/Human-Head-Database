@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>通过生成</title>
+    <link rel="stylesheet" href="/web/shared/styles/theme.css" />
+    <link rel="stylesheet" href="/web/shared/styles/components.css" />
+    <link rel="stylesheet" href="/web/modules/generate/generator.css" />
+  </head>
+  <body>
+    <nav class="site-switcher" aria-label="功能板块">
+      <a href="/">首页</a>
+      <a href="/measure">头模测量</a>
+      <a class="active" href="/generate">头模生成</a>
+    </nav>
+    <main class="app-shell">
+      <section class="workspace" aria-label="头部模型生成器">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Parametric Head Model</p>
+            <h1>头部 OBJ 生成器</h1>
+          </div>
+          <div class="actions">
+            <div class="gender-switch" role="group" aria-label="选择性别头模">
+              <button class="gender-button active" type="button" data-gender="male">男</button>
+              <button class="gender-button" type="button" data-gender="female">女</button>
+            </div>
+            <button id="resetButton" class="ghost-button" type="button" title="重置参数">↺</button>
+            <button id="downloadButton" class="primary-button" type="button">下载 OBJ</button>
+          </div>
+        </header>
+
+        <section class="viewer-panel">
+          <canvas id="viewer" width="960" height="720" aria-label="参数化头部三维预览"></canvas>
+          <div class="viewer-tools">
+            <button class="tool-button" type="button" data-view="front" title="正面">正</button>
+            <button class="tool-button" type="button" data-view="side" title="侧面">侧</button>
+            <button class="tool-button active" type="button" data-view="three" title="三维">3D</button>
+            <label class="toggle">
+              <input id="wireToggle" type="checkbox" />
+              <span>线框</span>
+            </label>
+          </div>
+        </section>
+
+        <aside class="control-panel" aria-label="头部参数控制">
+          <div class="panel-head">
+            <h2>测量参数</h2>
+            <span id="meshStats">0 vertices</span>
+          </div>
+          <div id="controls" class="controls"></div>
+        </aside>
+      </section>
+
+    </main>
+
+    <script type="module" src="/web/shared/components/site-navigation.js"></script>
+    <script src="/web/modules/generate/generator.js?v=github-1bcab8a-cache-reset"></script>
+  </body>
+</html>

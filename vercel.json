@@ -7,24 +7,24 @@
     },
     {
       "source": "/measure",
-      "destination": "/web/measure/index.html"
+      "destination": "/web/modules/measure/index.html"
     },
     {
       "source": "/measure/index.html",
-      "destination": "/web/measure/index.html"
+      "destination": "/web/modules/measure/index.html"
     },
     {
       "source": "/generate",
-      "destination": "/web/generate/index.html"
+      "destination": "/web/modules/generate/index.html"
     },
     {
       "source": "/generate/index.html",
-      "destination": "/web/generate/index.html"
+      "destination": "/web/modules/generate/index.html"
     }
   ],
   "headers": [
     {
-      "source": "/models/(.*)",
+      "source": "/web/modules/generate/assets/models/(.*)",
       "headers": [
         {
           "key": "Cache-Control",

@@ -51,9 +51,10 @@ const DERIVED_MODEL_PARAMETERS = [
 const MODEL_PARAMETER_META = [...PRIMARY_PARAMETERS, ...INTERNAL_MODEL_PARAMETERS, ...DERIVED_MODEL_PARAMETERS];
 
 const MODEL_OPTIONS = {
-  male: { label: "男性", url: "/web/generate/assets/models/asian-head.obj", filePrefix: "male-head-parametric" },
-  female: { label: "女性", url: "/web/generate/assets/models/female-head.obj", filePrefix: "female-head-parametric" },
+  male: { label: "男性", url: "/web/modules/generate/assets/models/asian-head.obj", filePrefix: "male-head-parametric" },
+  female: { label: "女性", url: "/web/modules/generate/assets/models/female-head.obj", filePrefix: "female-head-parametric" },
 };
+const MODEL_ASSET_VERSION = "github-1bcab8a";
 const MAX_PREVIEW_FACES = 4200;
 const MAX_PREVIEW_POINTS = 9200;
 const primaryParameters = Object.fromEntries(PRIMARY_PARAMETERS.map((item) => [item.key, item.value]));
@@ -810,13 +811,15 @@ async function loadBaseModel(gender = selectedGender) {
   drawEmptyState(`正在加载${option.label}基础 OBJ...`);
 
   try {
-    if (!modelCache[selectedGender]) {
-      const response = await fetch(option.url);
+    const cacheKey = `${selectedGender}-${MODEL_ASSET_VERSION}`;
+    const modelUrl = `${option.url}?v=${MODEL_ASSET_VERSION}`;
+    if (!modelCache[cacheKey]) {
+      const response = await fetch(modelUrl, { cache: "no-store" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const text = await response.text();
-      modelCache[selectedGender] = parseObj(text);
+      modelCache[cacheKey] = parseObj(text);
     }
-    baseMesh = modelCache[selectedGender];
+    baseMesh = modelCache[cacheKey];
     drawMesh();
   } catch (error) {
     stats.textContent = "OBJ 加载失败";
