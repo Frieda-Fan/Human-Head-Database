@@ -54,7 +54,7 @@ const MODEL_OPTIONS = {
   male: { label: "男性", url: "/web/modules/generate/assets/models/asian-head.obj", filePrefix: "male-head-parametric" },
   female: { label: "女性", url: "/web/modules/generate/assets/models/female-head.obj", filePrefix: "female-head-parametric" },
 };
-const MODEL_ASSET_VERSION = "github-1bcab8a";
+const MODEL_ASSET_VERSION = "base-models-20260604-height-117";
 const MAX_PREVIEW_FACES = 4200;
 const MAX_PREVIEW_POINTS = 9200;
 const primaryParameters = Object.fromEntries(PRIMARY_PARAMETERS.map((item) => [item.key, item.value]));
@@ -94,7 +94,7 @@ function displayValue(item, value = state[item.key]) {
 }
 
 function targetOutputHeadHeight(value = state.headHeight) {
-  return value * 1.2;
+  return value * 1.17;
 }
 
 function targetOutputHeadLength(value = state.headLen) {
@@ -142,7 +142,7 @@ function computeInternalModelParameters(primary) {
   return {
     faceLen: primary.sagittalArc * 0.43 + primary.headLen * 0.08,
     jawWidth: primary.faceWidth * 0.83,
-    subnasaleToChin: primary.earNoseDistance * 0.48 + primary.headHeight * 0.12,
+    subnasaleToChin: metaFor("earNoseDistance").value * 0.48 + primary.headHeight * 0.12,
     eyeEarHeight: primary.headHeight - primary.headEarHeight,
   };
 }
@@ -293,6 +293,7 @@ function deformVertex(vertex) {
   const jawMask = front * gaussian(ny, -0.62, 0.28);
   const chinMask = front * gaussian(ny, -0.86, 0.18) * smoothstep(0.7, 0.05, side);
   const noseMask = front * gaussian(nx, 0, 0.23) * gaussian(ny, -0.12, 0.28);
+  const noseRootMask = front * gaussian(nx, 0, 0.13) * gaussian(ny, 0.18, 0.16) * gaussian(nz, 0.62, 0.26);
   const eyeMask = front * gaussian(ny, 0.16, 0.19) * gaussian(side, 0.32, 0.16);
   const earMask = smoothstep(0.76, 1.02, side) * gaussian(ny, -0.12, 0.42) * gaussian(nz, -0.02, 0.46);
   const crownMask = upper * smoothstep(0.8, 0.1, side);
@@ -313,6 +314,7 @@ function deformVertex(vertex) {
   const noseHeight = normalizeParam("noseHeight");
   const noseWidth = normalizeParam("noseWidth");
   const subnasaleToChin = normalizeParam("subnasaleToChin", internal.subnasaleToChin);
+  const earNoseOffset = (state.earNoseDistance - metaFor("earNoseDistance").value) * 0.85;
   const pupilDistance = normalizeParam("pupilDistance");
   const earLength = normalizeParam("earLength");
   const earWidth = normalizeParam("earWidth");
@@ -343,6 +345,7 @@ function deformVertex(vertex) {
   y -= earMask * headEarHeight * 2.2;
 
   z *= 1 + front * (headLen * 0.02 + sagittalArc * 0.028) + back * (headLen * 0.032 + headCirc * 0.012 + sagittalArc * 0.03);
+  z += noseRootMask * earNoseOffset;
   z += noseMask * noseHeight * 8.8;
   z += chinMask * (subnasaleToChin * 4.8 + faceLen * 2.2);
   z -= occiputMask * (headLen * 8.2 + headCirc * 2.5 + sagittalArc * 5.6);
