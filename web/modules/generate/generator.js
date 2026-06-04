@@ -1,4 +1,4 @@
-const RANGE_EXPANSION = 0.2;
+const RANGE_EXPANSION = 0;
 
 function decimalsForStep(step = 1) {
   const text = String(step);
@@ -21,15 +21,15 @@ function expandParameterRange(item) {
 }
 
 const PRIMARY_PARAMETERS = [
-  { group: "头部尺寸", key: "headCirc", label: "1 头围", min: 500, max: 620, value: 560, unit: "mm", step: 1 },
-  { group: "头部尺寸", key: "sagittalArc", label: "5 头矢状弧（纵弧）", min: 240, max: 360, value: 291, unit: "mm", step: 1 },
-  { group: "头部尺寸", key: "coronalArc", label: "6 耳屏间弧（横弧）", min: 240, max: 360, value: 291, unit: "mm", step: 1 },
-  { group: "头部尺寸", key: "headLen", label: "3 头长", min: 165, max: 215, value: 190, unit: "mm", step: 1 },
-  { group: "头部尺寸", key: "headWidth", label: "4 头宽", min: 130, max: 175, value: 155, unit: "mm", step: 1 },
-  { group: "头部尺寸", key: "headHeight", label: "7 头高", min: 190, max: 260, value: 225, unit: "mm", step: 1 },
-  { group: "面部与比例", key: "pupilDistance", label: "16 瞳距", min: 55, max: 75, value: 64, unit: "mm", step: 1 },
-  { group: "面部与比例", key: "headEarHeight", label: "22 头耳高", min: 150, max: 235, value: 203, unit: "mm", step: 1 },
-  { group: "面部与比例", key: "earNoseDistance", label: "23 耳鼻距", min: 70, max: 120, value: 86, unit: "mm", step: 1 },
+  { group: "头部尺寸", key: "headCirc", label: "1 头围", min: 520, max: 630, value: 560, unit: "mm", step: 1 },
+  { group: "头部尺寸", key: "sagittalArc", label: "5 头矢状弧（纵弧）", min: 310, max: 380, value: 345, unit: "mm", step: 1 },
+  { group: "头部尺寸", key: "coronalArc", label: "6 耳屏间弧（横弧）", min: 350, max: 430, value: 390, unit: "mm", step: 1 },
+  { group: "头部尺寸", key: "headLen", label: "3 头长", min: 180, max: 250, value: 190, unit: "mm", step: 1 },
+  { group: "头部尺寸", key: "headWidth", label: "4 头宽", min: 140, max: 180, value: 155, unit: "mm", step: 1 },
+  { group: "头部尺寸", key: "headHeight", label: "7 头高", min: 210, max: 270, value: 225, unit: "mm", step: 1 },
+  { group: "面部与比例", key: "pupilDistance", label: "16 瞳距", min: 50, max: 80, value: 64, unit: "mm", step: 1 },
+  { group: "面部与比例", key: "headEarHeight", label: "22 头耳高", min: 120, max: 170, value: 145, unit: "mm", step: 1 },
+  { group: "面部与比例", key: "earNoseDistance", label: "23 耳鼻距", min: 80, max: 100, value: 86, unit: "mm", step: 1 },
   { group: "面部与比例", key: "headHeightWidthRatio", label: "头高/头宽", min: 1.15, max: 1.75, value: 1.45, unit: "", step: 0.01 },
 ].map(expandParameterRange);
 
@@ -54,7 +54,7 @@ const MODEL_OPTIONS = {
   male: { label: "男性", url: "/web/modules/generate/assets/models/asian-head.obj", filePrefix: "male-head-parametric" },
   female: { label: "女性", url: "/web/modules/generate/assets/models/female-head.obj", filePrefix: "female-head-parametric" },
 };
-const MODEL_ASSET_VERSION = "base-models-20260604-height-117";
+const MODEL_ASSET_VERSION = "base-models-20260604-male-cheeks";
 const MAX_PREVIEW_FACES = 4200;
 const MAX_PREVIEW_POINTS = 9200;
 const primaryParameters = Object.fromEntries(PRIMARY_PARAMETERS.map((item) => [item.key, item.value]));
@@ -294,6 +294,10 @@ function deformVertex(vertex) {
   const chinMask = front * gaussian(ny, -0.86, 0.18) * smoothstep(0.7, 0.05, side);
   const noseMask = front * gaussian(nx, 0, 0.23) * gaussian(ny, -0.12, 0.28);
   const noseRootMask = front * gaussian(nx, 0, 0.13) * gaussian(ny, 0.18, 0.16) * gaussian(nz, 0.62, 0.26);
+  const maleCheekMask =
+    selectedGender === "male"
+      ? front * gaussian(side, 0.46, 0.2) * gaussian(ny, -0.12, 0.32) * smoothstep(0.88, 0.32, side)
+      : 0;
   const eyeMask = front * gaussian(ny, 0.16, 0.19) * gaussian(side, 0.32, 0.16);
   const earMask = smoothstep(0.76, 1.02, side) * gaussian(ny, -0.12, 0.42) * gaussian(nz, -0.02, 0.46);
   const crownMask = upper * smoothstep(0.8, 0.1, side);
@@ -336,6 +340,7 @@ function deformVertex(vertex) {
   x *= 1 + faceMask * (faceWidth * 0.085 + headCirc * 0.012 + coronalArc * 0.018);
   x *= 1 + jawMask * jawWidth * 0.13;
   x *= 1 + noseMask * (noseWidth * 0.12);
+  x += Math.sign(nx) * maleCheekMask * 3.2;
   x += Math.sign(nx) * eyeMask * pupilDistance * 3.2;
 
   y += Math.sign(ny || -1) * Math.abs(vertex.y) * faceVerticalStretch;
@@ -345,6 +350,7 @@ function deformVertex(vertex) {
   y -= earMask * headEarHeight * 2.2;
 
   z *= 1 + front * (headLen * 0.02 + sagittalArc * 0.028) + back * (headLen * 0.032 + headCirc * 0.012 + sagittalArc * 0.03);
+  z += maleCheekMask * 6.5;
   z += noseRootMask * earNoseOffset;
   z += noseMask * noseHeight * 8.8;
   z += chinMask * (subnasaleToChin * 4.8 + faceLen * 2.2);
