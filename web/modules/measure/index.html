@@ -258,34 +258,31 @@
         <h3>📐 头模尺寸测量</h3>
 
         <div class="section-title">主要尺寸</div>
-        <div class="measurement"><span><span class="color-box" style="background:#e74c3c;"></span>头围</span><span id="circumferenceValue">--</span></div>
-        <div class="small-text">眉心到枕后点薄截面径向轮廓周长</div>
+        <div class="measurement"><span><span class="color-box" style="background:#3498db;"></span>头长</span><span id="lengthValue">--</span></div>
+        <div class="small-text">鼻尖到枕后点前后轴距离</div>
 
         <div class="measurement"><span><span class="color-box" style="background:#f39c12;"></span>头宽</span><span id="widthValue">--</span></div>
         <div class="small-text">左右耳屏左右轴距离</div>
 
-        <div class="measurement"><span><span class="color-box" style="background:#3498db;"></span>头长</span><span id="lengthValue">--</span></div>
-        <div class="small-text">鼻尖到枕后点前后轴距离</div>
-
         <div class="measurement"><span><span class="color-box" style="background:#2ecc71;"></span>头高</span><span id="heightValue">--</span></div>
         <div class="small-text">头顶点到颏下点 Y 轴距离</div>
-
-        <div class="measurement"><span><span class="color-box" style="background:#9b59b6;"></span>头耳高</span><span id="earHeightValue">--</span></div>
-        <div class="small-text">头顶点到双耳屏上下轴距离</div>
 
         <div class="section-title">面部特征</div>
         <div class="measurement"><span><span class="color-box" style="background:#00cec9;"></span>瞳距</span><span id="pupilDistanceValue">--</span></div>
         <div class="small-text">左右瞳孔中心估算点三维距离</div>
 
+        <div class="measurement"><span><span class="color-box" style="background:#9b59b6;"></span>头耳高</span><span id="earHeightValue">--</span></div>
+        <div class="small-text">头顶点到双耳屏上下轴距离</div>
+
         <div class="measurement"><span><span class="color-box" style="background:#00b894;"></span>耳鼻距</span><span id="earNoseDistanceValue">--</span></div>
         <div class="small-text">鼻根到耳屏前后轴距离</div>
 
-        <div class="section-title">弧长测量</div>
-        <div class="measurement"><span><span class="color-box" style="background:#00ff88;"></span>头横维</span><span id="transverseArcValue">--</span></div>
-        <div class="small-text">左耳屏 - 头顶 - 右耳屏弧长</div>
+        <div class="section-title">比例指数</div>
+        <div class="measurement"><span>头高/头宽比</span><span id="headHeightWidthRatioValue">--</span></div>
+        <div class="small-text">头高 ÷ 头宽</div>
 
-        <div class="measurement"><span><span class="color-box" style="background:#ff00ff;"></span>头纵维</span><span id="longitudinalArcValue">--</span></div>
-        <div class="small-text">眉心 - 头顶 - 枕后点弧长</div>
+        <div class="measurement"><span>颅指数</span><span id="cranialIndexValue">--</span></div>
+        <div class="small-text">头宽 ÷ 头长 × 100</div>
 
         <div style="margin-top:12px;padding-top:10px;border-top:1px solid #444;">
             <div style="font-size:10px;color:#888;">
@@ -346,15 +343,14 @@
         let batchTemplate = null;
         const LEGACY_MARK_STORAGE_KEYS = ['headModelMarkedPoints'];
         const measurementRows = [
-            { id: 'circumferenceValue', label: '头围' },
-            { id: 'widthValue', label: '头宽' },
             { id: 'lengthValue', label: '头长' },
+            { id: 'widthValue', label: '头宽' },
             { id: 'heightValue', label: '头高' },
-            { id: 'earHeightValue', label: '头耳高' },
             { id: 'pupilDistanceValue', label: '瞳距' },
+            { id: 'earHeightValue', label: '头耳高' },
             { id: 'earNoseDistanceValue', label: '耳鼻距' },
-            { id: 'transverseArcValue', label: '头横维' },
-            { id: 'longitudinalArcValue', label: '头纵维' }
+            { id: 'headHeightWidthRatioValue', label: '头高/头宽比', decimals: 3 },
+            { id: 'cranialIndexValue', label: '颅指数', decimals: 2 }
         ];
         const batchStatusLabels = {
             ready: '待处理',
@@ -710,7 +706,8 @@
             measurementRows.forEach(item => {
                 const text = document.getElementById(item.id)?.textContent || '';
                 const value = parseMeasurementValue(text);
-                values[item.id] = value === '' ? null : Number(Number(value).toFixed(decimals));
+                const itemDecimals = item.decimals ?? decimals;
+                values[item.id] = value === '' ? null : Number(Number(value).toFixed(itemDecimals));
             });
             return values;
         }
@@ -1267,14 +1264,14 @@
             if (!list) return;
             list.innerHTML = batchSamples.map(sample => {
                 const status = batchStatusLabels[sample.status] || sample.status;
-                const circumference = sample.measurements?.circumferenceValue ?? '';
+                const headLength = sample.measurements?.lengthValue ?? '';
                 const active = sample.id === currentSampleId ? ' active' : '';
                 const title = sample.errorMessage || (sample.reviewReasons || []).join('；') || sample.fileName;
                 return `
                     <div class="sample-row${active}" onclick="loadSampleForReview('${sample.id}')" title="${escapeExcelCell(title)}">
                         <span class="sample-name">${escapeExcelCell(sample.fileName)}</span>
                         <span class="sample-status status-${sample.status}">${escapeExcelCell(status)}</span>
-                        <span class="sample-measure">${circumference === '' || circumference === null ? '--' : circumference + ' mm'}</span>
+                        <span class="sample-measure">${headLength === '' || headLength === null ? '--' : headLength + ' mm'}</span>
                     </div>
                 `;
             }).join('');
@@ -1924,41 +1921,6 @@
                     return p[field] >= quantile(values, lowQ) && p[field] <= quantile(values, highQ);
                 }));
             }
-
-            function displaySideDebug() {
-                const debugNames = ['faceSideDebug', 'backSideDebug'];
-                [...measurementGroup.children].forEach((child) => {
-                    if (debugNames.includes(child.name)) measurementGroup.remove(child);
-                });
-                const addSidePoints = (name, color, filter) => {
-                    const positions = [];
-                    let kept = 0;
-                    for (let i = 0; i < localVertices.length; i++) {
-                        const p = localVertices[i];
-                        if (!filter(p)) continue;
-                        if (kept % 6 === 0) {
-                            positions.push(p.point.x, p.point.y, p.point.z);
-                        }
-                        kept++;
-                    }
-                    if (positions.length === 0) return;
-                    const geo = new THREE.BufferGeometry();
-                    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-                    const material = new THREE.PointsMaterial({
-                        color,
-                        size: Math.max(2, Math.min(size.x, size.y, size.z) * 0.01),
-                        transparent: true,
-                        opacity: 0.75
-                    });
-                    const points = new THREE.Points(geo, material);
-                    points.name = name;
-                    measurementGroup.add(points);
-                };
-                addSidePoints('faceSideDebug', 0x00ffcc, (p) => relZ(p) > 0.82 && relY(p) > 0.16 && relY(p) < 0.92);
-                addSidePoints('backSideDebug', 0xff66ff, (p) => relZ(p) < 0.18 && relY(p) > 0.16 && relY(p) < 0.92);
-            }
-
-            if (!suppressSceneRendering) displaySideDebug();
 
             let headTopLocal = pickLocalPoint(
                 (p) => Math.abs(p.lr - cx) < width * 0.28 && relZ(p) > 0.18,
@@ -3090,99 +3052,25 @@
         function updateMeasurements(options = {}) {
             if (!box || !center || !size || !mesh) return;
 
-            let vertices = [];
-            mesh.traverse((child) => {
-                if (child.isMesh && child.geometry) {
-                    const positions = child.geometry.attributes.position;
-                    for (let i = 0; i < positions.count; i++) {
-                        const p = new THREE.Vector3();
-                        p.fromBufferAttribute(positions, i);
-                        child.localToWorld(p);
-                        vertices.push(p);
-                    }
-                }
-            });
-
-            if (markedPoints.eyebrowCenter && markedPoints.occipital) {
-                // 计算以 X 方向为轴，且过眉心和枕后点的平面
-                // 平面法向量 = X 轴 × (枕后点 - 眉心) 向量
-                const planeNormal = new THREE.Vector3();
-                planeNormal.subVectors(markedPoints.occipital, markedPoints.eyebrowCenter);
-
-                // X 轴方向向量
-                const xAxis = axisVector('lr');
-
-                // 计算平面法向量：X 轴 × 眉心 - 枕后点向量
-                planeNormal.crossVectors(xAxis, planeNormal).normalize();
-
-                // 在该平面附近截取截面点（距离平面在 tolerance 范围内）
-                const tolerance = Math.min(size.x, size.y, size.z) * 0.018;
-                const sectionVertices = vertices.filter(v => {
-                    const dist = Math.abs(planeNormal.dot(v.clone().sub(markedPoints.eyebrowCenter)));
-                    return dist < tolerance;
-                });
-
-                if (sectionVertices.length > 10) {
-                    // 将点投影到过眉心和枕后点的平面上
-                    const midPoint = new THREE.Vector3();
-                    midPoint.addVectors(markedPoints.eyebrowCenter, markedPoints.occipital).multiplyScalar(0.5);
-
-                    // 构建平面局部坐标系
-                    // Y 轴：世界 Y 轴投影到平面上
-                    const planeY = axisVector('up');
-                    planeY.sub(planeNormal.clone().multiplyScalar(planeNormal.dot(planeY))).normalize();
-
-                    // Z 轴：平面法向量 × 平面 Y 轴
-                    const planeZ = new THREE.Vector3();
-                    planeZ.crossVectors(planeNormal, planeY).normalize();
-
-                    const projectToPlane2D = (p) => {
-                        const local = p.clone().sub(midPoint);
-                        return {
-                            x: planeY.dot(local),  // Y 方向坐标
-                            y: planeZ.dot(local)   // Z 方向坐标
-                        };
-                    };
-                    const points2D = sectionVertices.map(projectToPlane2D);
-                    const earPoints2D = [markedPoints.leftEar, markedPoints.rightEar]
-                        .filter(Boolean)
-                        .map(projectToPlane2D);
-
-                    const hull = radialContourWithEarScreens(points2D, earPoints2D);
-
-                    if (hull.length > 2) {
-                        let circumference = 0;
-                        for (let i = 0; i < hull.length; i++) {
-                            const p1 = new THREE.Vector2(hull[i].x, hull[i].y);
-                            const p2 = new THREE.Vector2(hull[(i + 1) % hull.length].x, hull[(i + 1) % hull.length].y);
-                            circumference += p1.distanceTo(p2);
-                        }
-
-                        // 应用单位转换系数
-                        const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
-                        document.getElementById('circumferenceValue').textContent = (circumference * scaleFactor).toFixed(2) + ' mm';
-                    }
-
-                    // 显示截面可视化
-                    if (!suppressSceneRendering) displayCircumferenceSection2(markedPoints.eyebrowCenter, markedPoints.occipital, planeNormal, planeY, planeZ, midPoint, sectionVertices, hull);
-                }
-            }
+            let headLength = null;
+            let headWidth = null;
+            let headHeight = null;
 
             if (markedPoints.leftEar && markedPoints.rightEar) {
                 const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
-                const headWidth = Math.abs(axisValue(markedPoints.rightEar, 'lr') - axisValue(markedPoints.leftEar, 'lr')) * scaleFactor;
+                headWidth = Math.abs(axisValue(markedPoints.rightEar, 'lr') - axisValue(markedPoints.leftEar, 'lr')) * scaleFactor;
                 document.getElementById('widthValue').textContent = headWidth.toFixed(2) + ' mm';
             }
 
             if (markedPoints.noseTip && markedPoints.occipital) {
                 const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
-                const headLength = Math.abs(axisValue(markedPoints.occipital, 'fb') - axisValue(markedPoints.noseTip, 'fb')) * scaleFactor;
+                headLength = Math.abs(axisValue(markedPoints.occipital, 'fb') - axisValue(markedPoints.noseTip, 'fb')) * scaleFactor;
                 document.getElementById('lengthValue').textContent = headLength.toFixed(2) + ' mm';
             }
 
             if (markedPoints.headTop && markedPoints.chin) {
                 const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
-                const headHeight = Math.abs(axisValue(markedPoints.headTop, 'up') - axisValue(markedPoints.chin, 'up')) * scaleFactor;
+                headHeight = Math.abs(axisValue(markedPoints.headTop, 'up') - axisValue(markedPoints.chin, 'up')) * scaleFactor;
                 document.getElementById('heightValue').textContent = headHeight.toFixed(2) + ' mm';
             }
 
@@ -3205,53 +3093,18 @@
                 document.getElementById('earNoseDistanceValue').textContent = earNoseDistance.toFixed(2) + ' mm';
             }
 
-            if (markedPoints.leftEar && markedPoints.headTop && markedPoints.rightEar) {
-                const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
-
-                let earToHeadArc = calculateArcLength(markedPoints.leftEar, markedPoints.headTop, markedPoints.rightEar);
-                const earChord = markedPoints.leftEar.distanceTo(markedPoints.rightEar);
-                const crownRise = Math.max(
-                    0,
-                    axisValue(markedPoints.headTop, 'up') - (axisValue(markedPoints.leftEar, 'up') + axisValue(markedPoints.rightEar, 'up')) / 2
-                );
-                const a = earChord / 2;
-                const b = Math.max(crownRise, a * 0.35);
-                const ellipseArc = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))) / 2;
-                if (!Number.isFinite(earToHeadArc) || earToHeadArc > ellipseArc * 1.8) {
-                    earToHeadArc = ellipseArc;
-                }
-
-                const transverseArc = earToHeadArc * scaleFactor;
-                document.getElementById('transverseArcValue').textContent = transverseArc.toFixed(2) + ' mm';
-
-                if (!suppressSceneRendering) displayArcWithPlane('transverse', markedPoints.leftEar, markedPoints.headTop, markedPoints.rightEar, 0x00ff88);
-            } else {
-                // 移除弧线、截面、采样点、弧线点和直线
-                measurementGroup.children = measurementGroup.children.filter(child =>
-                    child.name !== 'transverseArc' &&
-                    child.name !== 'transversePlane' &&
-                    child.name !== 'transverseSectionPoints' &&
-                    child.name !== 'transverseArcPoints' &&
-                    child.name !== 'transverseLeftLine' &&
-                    child.name !== 'transverseRightLine'
-                );
-            }
-
-            if (markedPoints.eyebrowCenter && markedPoints.headTop && markedPoints.occipital) {
-                const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
-                const longitudinalArc = calculateArcLength(markedPoints.eyebrowCenter, markedPoints.headTop, markedPoints.occipital) * scaleFactor;
-                document.getElementById('longitudinalArcValue').textContent = longitudinalArc.toFixed(2) + ' mm';
-                // 显示头纵维弧线和截面
-                if (!suppressSceneRendering) displayArcWithPlane('longitudinal', markedPoints.eyebrowCenter, markedPoints.headTop, markedPoints.occipital, 0xff00ff);
-            } else {
-                // 移除弧线、截面、采样点和弧线点
-                measurementGroup.children = measurementGroup.children.filter(child =>
-                    child.name !== 'longitudinalArc' &&
-                    child.name !== 'longitudinalPlane' &&
-                    child.name !== 'longitudinalSectionPoints' &&
-                    child.name !== 'longitudinalArcPoints'
-                );
-            }
+            const heightWidthRatio = headHeight !== null && headWidth > 0
+                ? headHeight / headWidth
+                : null;
+            const cranialIndex = headWidth !== null && headLength > 0
+                ? headWidth / headLength * 100
+                : null;
+            document.getElementById('headHeightWidthRatioValue').textContent = heightWidthRatio === null
+                ? '--'
+                : heightWidthRatio.toFixed(3);
+            document.getElementById('cranialIndexValue').textContent = cranialIndex === null
+                ? '--'
+                : cranialIndex.toFixed(2);
 
             if (!options.skipSampleSync && !isRestoringSample) {
                 const sample = getCurrentSample();
