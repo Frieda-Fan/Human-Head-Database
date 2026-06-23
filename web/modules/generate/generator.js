@@ -55,6 +55,8 @@ const MODEL_OPTIONS = {
   female: { label: "女性", url: "/web/modules/generate/assets/models/female-head.obj", filePrefix: "female-head-parametric" },
 };
 const MODEL_ASSET_VERSION = "base-models-20260604-male-cheeks";
+const SEMANTIC_REGIONS_URL = "/web/modules/generate/assets/models/semantic-regions.json";
+const SEMANTIC_REGIONS_VERSION = "welded-regions-20260622";
 const MAX_PREVIEW_FACES = 4200;
 const MAX_PREVIEW_POINTS = 9200;
 const primaryParameters = Object.fromEntries(PRIMARY_PARAMETERS.map((item) => [item.key, item.value]));
@@ -71,6 +73,7 @@ let selectedGender = "male";
 let baseMesh = null;
 let mesh = null;
 const modelCache = {};
+let semanticRegionsPromise = null;
 let lastCanvasSize = { width: 0, height: 0 };
 
 function clamp(value, min, max) {
@@ -275,7 +278,7 @@ function updateControlDisplay(keys = PRIMARY_PARAMETERS.map((item) => item.key))
   });
 }
 
-function deformVertex(vertex) {
+function deformVertex(vertex, index) {
   const bounds = baseMesh.bounds;
   const width = bounds.max.x - bounds.min.x;
   const height = bounds.max.y - bounds.min.y;
@@ -289,17 +292,10 @@ function deformVertex(vertex) {
   const back = smoothstep(-0.18, -0.9, nz);
   const upper = smoothstep(0.18, 0.95, ny);
   const lower = smoothstep(-0.12, -0.95, ny);
-  const faceMask = front * gaussian(ny, -0.16, 0.72) * smoothstep(1.06, 0.1, side);
+  const faceMask = Math.max(getSemanticWeight("leftCheek", index), getSemanticWeight("rightCheek", index));
   const jawMask = front * gaussian(ny, -0.62, 0.28);
   const chinMask = front * gaussian(ny, -0.86, 0.18) * smoothstep(0.7, 0.05, side);
-  const noseMask = front * gaussian(nx, 0, 0.23) * gaussian(ny, -0.12, 0.28);
-  const noseRootMask = front * gaussian(nx, 0, 0.13) * gaussian(ny, 0.18, 0.16) * gaussian(nz, 0.62, 0.26);
-  const maleCheekMask =
-    selectedGender === "male"
-      ? front * gaussian(side, 0.46, 0.2) * gaussian(ny, -0.12, 0.32) * smoothstep(0.88, 0.32, side)
-      : 0;
   const eyeMask = front * gaussian(ny, 0.16, 0.19) * gaussian(side, 0.32, 0.16);
-  const earMask = smoothstep(0.76, 1.02, side) * gaussian(ny, -0.12, 0.42) * gaussian(nz, -0.02, 0.46);
   const crownMask = upper * smoothstep(0.8, 0.1, side);
   const occiputMask = back * gaussian(ny, 0.0, 0.78);
   const internal = computeInternalModelParameters(state);
@@ -307,21 +303,14 @@ function deformVertex(vertex) {
   const headCirc = normalizeParam("headCirc");
   const faceLen = normalizeParam("faceLen", internal.faceLen);
   const headLen = normalizeParam("headLen");
-  const headWidth = normalizeParam("headWidth");
   const headHeight = normalizeParam("headHeight");
   const sagittalArc = normalizeParam("sagittalArc");
   const coronalArc = normalizeParam("coronalArc");
-  const headEarHeight = normalizeParam("headEarHeight");
   const heightWidthRatio = normalizeParam("headHeightWidthRatio");
   const faceWidth = normalizeParam("faceWidth");
   const jawWidth = normalizeParam("jawWidth", internal.jawWidth);
-  const noseHeight = normalizeParam("noseHeight");
-  const noseWidth = normalizeParam("noseWidth");
   const subnasaleToChin = normalizeParam("subnasaleToChin", internal.subnasaleToChin);
-  const earNoseOffset = (state.earNoseDistance - metaFor("earNoseDistance").value) * 0.85;
   const pupilDistance = normalizeParam("pupilDistance");
-  const earLength = normalizeParam("earLength");
-  const earWidth = normalizeParam("earWidth");
 
   const xScale = state.headWidth / baseMesh.size.x;
   const yScale = state.headHeight / baseMesh.size.y;
@@ -330,7 +319,6 @@ function deformVertex(vertex) {
   const faceVerticalStretch = faceMask * faceLen * 0.075;
   const lowerVerticalStretch = lower * (subnasaleToChin * 0.08 + faceLen * 0.025);
   const crownLift = crownMask * (headHeight * 4.2 + headCirc * 2.6 + sagittalArc * 2.1 + heightWidthRatio * 1.4);
-  const noseLevelShift = noseMask * noseHeight * 1.5;
 
   let x = vertex.x * xScale;
   let y = vertex.y * yScale;
@@ -339,20 +327,13 @@ function deformVertex(vertex) {
   x *= 1 + crownMask * (headCirc * 0.028 + coronalArc * 0.04);
   x *= 1 + faceMask * (faceWidth * 0.085 + headCirc * 0.012 + coronalArc * 0.018);
   x *= 1 + jawMask * jawWidth * 0.13;
-  x *= 1 + noseMask * (noseWidth * 0.12);
-  x += Math.sign(nx) * maleCheekMask * 3.2;
   x += Math.sign(nx) * eyeMask * pupilDistance * 3.2;
 
   y += Math.sign(ny || -1) * Math.abs(vertex.y) * faceVerticalStretch;
   y -= lowerVerticalStretch * 7.5;
   y += crownLift;
-  y += noseLevelShift;
-  y -= earMask * headEarHeight * 2.2;
 
   z *= 1 + front * (headLen * 0.02 + sagittalArc * 0.028) + back * (headLen * 0.032 + headCirc * 0.012 + sagittalArc * 0.03);
-  z += maleCheekMask * 6.5;
-  z += noseRootMask * earNoseOffset;
-  z += noseMask * noseHeight * 8.8;
   z += chinMask * (subnasaleToChin * 4.8 + faceLen * 2.2);
   z -= occiputMask * (headLen * 8.2 + headCirc * 2.5 + sagittalArc * 5.6);
   z += upper * front * (headCirc * 3.2 + headHeight * 2.2);
@@ -363,15 +344,76 @@ function deformVertex(vertex) {
 function generateMesh() {
   if (!baseMesh) return { vertices: [], faces: [] };
   let vertices = normalizeMainDimensions(baseMesh.vertices.map(deformVertex));
+  const normalizedAudit = location.hostname === "127.0.0.1" || location.hostname === "localhost" ? auditMeshGeometry(vertices) : null;
   vertices = applyLocalCalibrations(vertices);
-  vertices = normalizeMainDimensions(vertices);
-  vertices = applyLocalCalibrations(vertices);
-  vertices = normalizeMainDimensions(vertices);
   return {
     vertices,
     faces: baseMesh.faces,
     previewFaces: baseMesh.previewFaces,
+    audit: normalizedAudit ? { normalized: normalizedAudit, final: auditMeshGeometry(vertices) } : null,
   };
+}
+
+async function loadSemanticRegionAsset() {
+  if (!semanticRegionsPromise) {
+    semanticRegionsPromise = fetch(`${SEMANTIC_REGIONS_URL}?v=${SEMANTIC_REGIONS_VERSION}`, { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Semantic regions HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((asset) => {
+        if (asset.version !== 2 || !asset.models) throw new Error("Unsupported semantic region asset");
+        return asset;
+      });
+  }
+  return semanticRegionsPromise;
+}
+
+function hydrateSemanticRegions(model, definition, gender) {
+  if (!definition || definition.vertexCount !== model.vertices.length) {
+    throw new Error(`${gender} semantic regions do not match the base model`);
+  }
+  if (!Array.isArray(definition.weldGroups)) throw new Error(`${gender} semantic regions are missing weld groups`);
+  model.weldGroups = definition.weldGroups.map((group) => Object.freeze([...group]));
+  model.adjacency = buildMeshAdjacency(model.vertices.length, model.faces, model.weldGroups);
+  const regions = {};
+  Object.entries(definition.regions).forEach(([name, region]) => {
+    const weights = new Float32Array(model.vertices.length);
+    region.core.forEach((index) => {
+      if (index < 0 || index >= model.vertices.length) throw new Error(`${gender}.${name} contains an invalid vertex`);
+      weights[index] = 1;
+    });
+    region.blend.forEach(([index, weight]) => {
+      if (index < 0 || index >= model.vertices.length) throw new Error(`${gender}.${name} contains an invalid blend vertex`);
+      weights[index] = Math.max(weights[index], weight);
+    });
+    regions[name] = {
+      core: Object.freeze([...region.core]),
+      influences: Object.freeze(Array.from(weights, (weight, index) => ({ index, weight })).filter(({ weight }) => weight > 0)),
+      weights,
+    };
+  });
+  return Object.freeze(regions);
+}
+
+function buildMeshAdjacency(vertexCount, faces, weldGroups) {
+  const adjacency = Array.from({ length: vertexCount }, () => new Set());
+  faces.forEach((face) => {
+    for (let edge = 0; edge < 3; edge += 1) {
+      const from = face[edge];
+      const to = face[(edge + 1) % 3];
+      adjacency[from].add(to);
+      adjacency[to].add(from);
+    }
+  });
+  weldGroups.forEach((group) => {
+    const representative = group[0];
+    group.slice(1).forEach((index) => {
+      adjacency[representative].add(index);
+      adjacency[index].add(representative);
+    });
+  });
+  return adjacency.map((neighbors) => Object.freeze([...neighbors]));
 }
 
 function normalizeMainDimensions(vertices) {
@@ -437,19 +479,11 @@ function getBaseNormalized(vertex) {
 }
 
 function getLocalMask(name) {
-  return baseMesh.vertices
-    .map((vertex, index) => ({ index, n: getBaseNormalized(vertex) }))
-    .filter(({ n }) => {
-      const side = Math.abs(n.x);
-      if (name === "nose") return side < 0.2 && n.y > -0.38 && n.y < 0.18 && n.z > 0.62;
-      if (name === "bridge") return side < 0.16 && n.y > -0.08 && n.y < 0.38 && n.z > 0.52;
-      if (name === "face") return side > 0.22 && side < 0.72 && n.y > -0.38 && n.y < 0.28 && n.z > 0.14;
-      if (name === "jaw") return side > 0.28 && n.y > -0.85 && n.y < -0.34 && n.z > -0.05;
-      if (name === "leftEar") return n.x < -0.72 && n.y > -0.42 && n.y < 0.42 && n.z > -0.42 && n.z < 0.32;
-      if (name === "rightEar") return n.x > 0.72 && n.y > -0.42 && n.y < 0.42 && n.z > -0.42 && n.z < 0.32;
-      return false;
-    })
-    .map(({ index }) => index);
+  return baseMesh?.semanticRegions?.[name]?.core || [];
+}
+
+function getSemanticWeight(name, index) {
+  return baseMesh?.semanticRegions?.[name]?.weights[index] || 0;
 }
 
 function getCoreIndexes(axis) {
@@ -490,67 +524,8 @@ function spanForIndexes(vertices, indexes, axis) {
   return { min, max, span: max - min || 1, center: (min + max) * 0.5, count: indexes.length };
 }
 
-function rangeWeight(value, innerMin, innerMax, outerMin, outerMax) {
-  if (value >= innerMin && value <= innerMax) return 1;
-  if (value < outerMin || value > outerMax) return 0;
-  if (value < innerMin) return smoothstep(outerMin, innerMin, value);
-  return 1 - smoothstep(innerMax, outerMax, value);
-}
-
-function minWeight(value, innerMin, outerMin) {
-  if (value >= innerMin) return 1;
-  if (value <= outerMin) return 0;
-  return smoothstep(outerMin, innerMin, value);
-}
-
-function maxWeight(value, innerMax, outerMax) {
-  if (value <= innerMax) return 1;
-  if (value >= outerMax) return 0;
-  return 1 - smoothstep(innerMax, outerMax, value);
-}
-
 function getInfluenceWeights(name) {
-  return baseMesh.vertices
-    .map((vertex, index) => {
-      const n = getBaseNormalized(vertex);
-      const side = Math.abs(n.x);
-      let weight = 0;
-
-      if (name === "nose") {
-        weight =
-          maxWeight(side, 0.2, 0.34) *
-          rangeWeight(n.y, -0.38, 0.18, -0.54, 0.34) *
-          minWeight(n.z, 0.62, 0.42);
-      } else if (name === "bridge") {
-        weight =
-          maxWeight(side, 0.16, 0.28) *
-          rangeWeight(n.y, -0.08, 0.38, -0.24, 0.56) *
-          minWeight(n.z, 0.52, 0.34);
-      } else if (name === "face") {
-        weight =
-          rangeWeight(side, 0.22, 0.72, 0.1, 0.86) *
-          rangeWeight(n.y, -0.38, 0.28, -0.56, 0.44) *
-          minWeight(n.z, 0.14, -0.04);
-      } else if (name === "jaw") {
-        weight =
-          minWeight(side, 0.28, 0.12) *
-          rangeWeight(n.y, -0.85, -0.34, -0.98, -0.18) *
-          minWeight(n.z, -0.05, -0.26);
-      } else if (name === "leftEar") {
-        weight =
-          rangeWeight(n.x, -1.08, -0.72, -1.16, -0.58) *
-          rangeWeight(n.y, -0.42, 0.42, -0.56, 0.56) *
-          rangeWeight(n.z, -0.42, 0.32, -0.58, 0.48);
-      } else if (name === "rightEar") {
-        weight =
-          rangeWeight(n.x, 0.72, 1.08, 0.58, 1.16) *
-          rangeWeight(n.y, -0.42, 0.42, -0.56, 0.56) *
-          rangeWeight(n.z, -0.42, 0.32, -0.58, 0.48);
-      }
-
-      return { index, weight };
-    })
-    .filter(({ weight }) => weight > 0);
+  return baseMesh?.semanticRegions?.[name]?.influences || [];
 }
 
 function scaleWithFalloff(vertices, measureIndexes, influenceWeights, axis, targetSpan) {
@@ -580,43 +555,229 @@ function centerForIndexes(vertices, indexes) {
   return center;
 }
 
-function scaleEarAsUnit(vertices, indexes, influenceWeights, targetLength, targetDepth) {
-  if (!indexes.length || !influenceWeights.length) return;
-  const ySpan = spanForIndexes(vertices, indexes, "y");
-  const zSpan = spanForIndexes(vertices, indexes, "z");
-  const yScale = clamp(targetLength / ySpan.span, 0.88, 1.12);
-  const zScale = clamp(targetDepth / zSpan.span, 0.88, 1.12);
+function uniformRegionScale(vertices, baseVertices, indexes, currentCenter, baseCenter) {
+  let currentRadiusSquared = 0;
+  let baseRadiusSquared = 0;
+  indexes.forEach((index) => {
+    const current = vertices[index];
+    const base = baseVertices[index];
+    currentRadiusSquared +=
+      (current.x - currentCenter.x) ** 2 +
+      (current.y - currentCenter.y) ** 2 +
+      (current.z - currentCenter.z) ** 2;
+    baseRadiusSquared +=
+      (base.x - baseCenter.x) ** 2 +
+      (base.y - baseCenter.y) ** 2 +
+      (base.z - baseCenter.z) ** 2;
+  });
+  return baseRadiusSquared > 0 ? Math.sqrt(currentRadiusSquared / baseRadiusSquared) : 1;
+}
 
-  influenceWeights.forEach(({ index, weight }) => {
-    const vertex = vertices[index];
-    const targetY = ySpan.center + (vertex.y - ySpan.center) * yScale;
-    const targetZ = zSpan.center + (vertex.z - zSpan.center) * zScale;
-    vertices[index] = {
-      ...vertex,
-      y: vertex.y + (targetY - vertex.y) * weight,
-      z: vertex.z + (targetZ - vertex.z) * weight,
+function getRegionShapeTargets(vertices, name) {
+  const indexes = getLocalMask(name);
+  if (!indexes.length) return [];
+  const currentCenter = centerForIndexes(vertices, indexes);
+  const baseCenter = centerForIndexes(baseMesh.vertices, indexes);
+  const scale = uniformRegionScale(vertices, baseMesh.vertices, indexes, currentCenter, baseCenter);
+  return indexes.map((index) => {
+    const base = baseMesh.vertices[index];
+    return {
+      index,
+      target: {
+        x: currentCenter.x + (base.x - baseCenter.x) * scale,
+        y: currentCenter.y + (base.y - baseCenter.y) * scale,
+        z: currentCenter.z + (base.z - baseCenter.z) * scale,
+      },
     };
   });
 }
 
+function synchronizeWeldedVertices(vertices) {
+  baseMesh.weldGroups.forEach((group) => {
+    const center = centerForIndexes(vertices, group);
+    group.forEach((index) => {
+      vertices[index] = { ...center };
+    });
+  });
+}
+
+function addConstraint(constraints, index, target) {
+  const constraint = constraints.get(index) || { targets: [] };
+  constraint.targets.push(target);
+  constraints.set(index, constraint);
+}
+
+function averagedConstraintTarget(constraint) {
+  const target = constraint.targets.reduce(
+    (sum, value) => ({ x: sum.x + value.x, y: sum.y + value.y, z: sum.z + value.z }),
+    { x: 0, y: 0, z: 0 },
+  );
+  target.x /= constraint.targets.length;
+  target.y /= constraint.targets.length;
+  target.z /= constraint.targets.length;
+  return target;
+}
+
+function collectActiveWeights(names) {
+  const active = new Map();
+  names.forEach((name) => {
+    getInfluenceWeights(name).forEach(({ index, weight }) => {
+      active.set(index, Math.max(active.get(index) || 0, weight));
+    });
+  });
+  return active;
+}
+
+function earTranslation(vertices) {
+  const leftRoot = getLocalMask("leftEarRoot");
+  const rightRoot = getLocalMask("rightEarRoot");
+  const noseRoot = getLocalMask("noseRoot");
+  if (!leftRoot.length || !rightRoot.length || !noseRoot.length) return { x: 0, y: 0, z: 0 };
+
+  const leftCenter = centerForIndexes(vertices, leftRoot);
+  const rightCenter = centerForIndexes(vertices, rightRoot);
+  const noseCenter = centerForIndexes(vertices, noseRoot);
+  const currentEarCenter = {
+    y: (leftCenter.y + rightCenter.y) * 0.5,
+    z: (leftCenter.z + rightCenter.z) * 0.5,
+  };
+  const crownY = getHeadHeightBounds(vertices).max;
+  return {
+    x: 0,
+    y: crownY - state.headEarHeight - currentEarCenter.y,
+    z: noseCenter.z - state.earNoseDistance - currentEarCenter.z,
+  };
+}
+
+function solveSmoothDisplacement(vertices, constraints, activeWeights, iterations = 28) {
+  const displacements = vertices.map(() => ({ x: 0, y: 0, z: 0 }));
+  const fixed = new Uint8Array(vertices.length);
+  constraints.forEach((constraint, index) => {
+    const target = averagedConstraintTarget(constraint);
+    displacements[index] = {
+      x: target.x - vertices[index].x,
+      y: target.y - vertices[index].y,
+      z: target.z - vertices[index].z,
+    };
+    fixed[index] = 1;
+  });
+  const activeIndexes = [...activeWeights.keys()];
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    const next = displacements.map((value) => ({ ...value }));
+    activeIndexes.forEach((index) => {
+      if (fixed[index]) return;
+      const neighbors = baseMesh.adjacency[index];
+      if (!neighbors.length) return;
+      const average = neighbors.reduce(
+        (sum, neighbor) => ({
+          x: sum.x + displacements[neighbor].x,
+          y: sum.y + displacements[neighbor].y,
+          z: sum.z + displacements[neighbor].z,
+        }),
+        { x: 0, y: 0, z: 0 },
+      );
+      const envelope = activeWeights.get(index) || 0;
+      next[index] = {
+        x: (average.x / neighbors.length) * envelope,
+        y: (average.y / neighbors.length) * envelope,
+        z: (average.z / neighbors.length) * envelope,
+      };
+    });
+    for (let index = 0; index < displacements.length; index += 1) displacements[index] = next[index];
+  }
+  activeIndexes.forEach((index) => {
+    vertices[index] = {
+      x: vertices[index].x + displacements[index].x,
+      y: vertices[index].y + displacements[index].y,
+      z: vertices[index].z + displacements[index].z,
+    };
+  });
+}
+
+function countOrientationChanges(reference, candidate) {
+  let changes = 0;
+  baseMesh.faces.forEach((face) => {
+    const referenceNormal = faceNormal(face, reference);
+    const candidateNormal = faceNormal(face, candidate);
+    if (
+      referenceNormal.x * candidateNormal.x +
+        referenceNormal.y * candidateNormal.y +
+        referenceNormal.z * candidateNormal.z <
+      0
+    ) {
+      changes += 1;
+    }
+  });
+  return changes;
+}
+
+function countBaseOrientationChanges(vertices) {
+  return countOrientationChanges(baseMesh.vertices, vertices);
+}
+
+function limitLocalDeformation(source, candidate) {
+  const sourceFlips = countBaseOrientationChanges(source);
+  const isSafe = (vertices) =>
+    countOrientationChanges(source, vertices) === 0 && countBaseOrientationChanges(vertices) <= sourceFlips;
+  if (isSafe(candidate)) return candidate;
+  let safe = 0;
+  let unsafe = 1;
+  for (let iteration = 0; iteration < 12; iteration += 1) {
+    const amount = (safe + unsafe) * 0.5;
+    const blended = source.map((vertex, index) => ({
+      x: vertex.x + (candidate[index].x - vertex.x) * amount,
+      y: vertex.y + (candidate[index].y - vertex.y) * amount,
+      z: vertex.z + (candidate[index].z - vertex.z) * amount,
+    }));
+    if (isSafe(blended)) safe = amount;
+    else unsafe = amount;
+  }
+  return source.map((vertex, index) => ({
+    x: vertex.x + (candidate[index].x - vertex.x) * safe,
+    y: vertex.y + (candidate[index].y - vertex.y) * safe,
+    z: vertex.z + (candidate[index].z - vertex.z) * safe,
+  }));
+}
+
 function applyLocalCalibrations(vertices) {
+  const source = vertices.map((vertex) => ({ ...vertex }));
   const calibrated = vertices.map((vertex) => ({ ...vertex }));
-  const internal = computeInternalModelParameters(state);
-  const nose = getLocalMask("nose");
-  const bridge = getLocalMask("bridge");
-  const face = getLocalMask("face");
-  const jaw = getLocalMask("jaw");
-  const leftEar = getLocalMask("leftEar");
-  const rightEar = getLocalMask("rightEar");
+  const cheeks = [...getLocalMask("leftCheek"), ...getLocalMask("rightCheek")];
+  const cheekInfluences = new Map();
+  [...getInfluenceWeights("leftCheek"), ...getInfluenceWeights("rightCheek")].forEach(({ index, weight }) => {
+    cheekInfluences.set(index, Math.max(cheekInfluences.get(index) || 0, weight));
+  });
+  scaleWithFalloff(
+    calibrated,
+    cheeks,
+    [...cheekInfluences].map(([index, weight]) => ({ index, weight })),
+    "x",
+    state.faceWidth,
+  );
 
-  scaleWithFalloff(calibrated, nose, getInfluenceWeights("nose"), "x", state.noseWidth);
-  scaleWithFalloff(calibrated, bridge, getInfluenceWeights("bridge"), "y", state.noseHeight);
-  scaleWithFalloff(calibrated, face, getInfluenceWeights("face"), "x", state.faceWidth);
-  scaleWithFalloff(calibrated, jaw, getInfluenceWeights("jaw"), "x", internal.jawWidth);
-  scaleEarAsUnit(calibrated, leftEar, getInfluenceWeights("leftEar"), state.earLength, state.earWidth);
-  scaleEarAsUnit(calibrated, rightEar, getInfluenceWeights("rightEar"), state.earLength, state.earWidth);
-
-  return calibrated;
+  synchronizeWeldedVertices(calibrated);
+  const lockNames = ["leftEyeSocket", "rightEyeSocket", "nose", "leftBrow", "rightBrow", "leftEar", "rightEar"];
+  const constraints = new Map();
+  const earTargets = new Map();
+  lockNames.forEach((name) => {
+    getRegionShapeTargets(calibrated, name).forEach(({ index, target }) => {
+      if (name === "leftEar" || name === "rightEar") earTargets.set(index, target);
+      else addConstraint(constraints, index, target);
+    });
+  });
+  const provisional = calibrated.map((vertex) => ({ ...vertex }));
+  earTargets.forEach((target, index) => {
+    provisional[index] = { ...target };
+  });
+  const delta = earTranslation(provisional);
+  earTargets.forEach((target, index) => {
+    addConstraint(constraints, index, { x: target.x + delta.x, y: target.y + delta.y, z: target.z + delta.z });
+  });
+  solveSmoothDisplacement(calibrated, constraints, collectActiveWeights(lockNames));
+  synchronizeWeldedVertices(calibrated);
+  const safe = limitLocalDeformation(source, calibrated);
+  synchronizeWeldedVertices(safe);
+  return safe;
 }
 
 function faceNormal(face, vertices) {
@@ -710,6 +871,28 @@ function drawPreviewBackdrop() {
   ctx.fill();
 }
 
+function auditMeshGeometry(vertices) {
+  let maxSeamGap = 0;
+  baseMesh.weldGroups.forEach((group) => {
+    const anchor = vertices[group[0]];
+    group.slice(1).forEach((index) => {
+      const vertex = vertices[index];
+      maxSeamGap = Math.max(maxSeamGap, Math.hypot(vertex.x - anchor.x, vertex.y - anchor.y, vertex.z - anchor.z));
+    });
+  });
+  let flippedFaces = 0;
+  let degenerateFaces = 0;
+  baseMesh.faces.forEach((face) => {
+    const baseNormal = faceNormal(face, baseMesh.vertices);
+    const currentNormal = faceNormal(face, vertices);
+    const baseArea = Math.hypot(baseNormal.x, baseNormal.y, baseNormal.z);
+    const currentArea = Math.hypot(currentNormal.x, currentNormal.y, currentNormal.z);
+    if (currentArea < baseArea * 1e-4) degenerateFaces += 1;
+    if (baseNormal.x * currentNormal.x + baseNormal.y * currentNormal.y + baseNormal.z * currentNormal.z < 0) flippedFaces += 1;
+  });
+  return { maxSeamGap, flippedFaces, degenerateFaces };
+}
+
 function drawMesh() {
   if (!baseMesh) {
     drawEmptyState("正在加载基础头部 OBJ...");
@@ -720,6 +903,7 @@ function drawMesh() {
   drawPreviewBackdrop();
 
   mesh = generateMesh();
+  if (mesh.audit) canvas.dataset.meshAudit = JSON.stringify(mesh.audit);
   const fitScale = getPreviewScale();
   const previewVertices = mesh.vertices.map((vertex) => ({
     x: vertex.x * fitScale,
@@ -822,6 +1006,7 @@ async function loadBaseModel(gender = selectedGender) {
   try {
     const cacheKey = `${selectedGender}-${MODEL_ASSET_VERSION}`;
     const modelUrl = `${option.url}?v=${MODEL_ASSET_VERSION}`;
+    const semanticAssetPromise = loadSemanticRegionAsset();
     if (!modelCache[cacheKey]) {
       const response = await fetch(modelUrl, { cache: "no-store" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -829,6 +1014,10 @@ async function loadBaseModel(gender = selectedGender) {
       modelCache[cacheKey] = parseObj(text);
     }
     baseMesh = modelCache[cacheKey];
+    if (!baseMesh.semanticRegions) {
+      const semanticAsset = await semanticAssetPromise;
+      baseMesh.semanticRegions = hydrateSemanticRegions(baseMesh, semanticAsset.models[selectedGender], selectedGender);
+    }
     drawMesh();
   } catch (error) {
     stats.textContent = "OBJ 加载失败";
