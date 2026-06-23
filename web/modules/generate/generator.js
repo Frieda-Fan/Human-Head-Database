@@ -345,12 +345,15 @@ function generateMesh() {
   if (!baseMesh) return { vertices: [], faces: [] };
   let vertices = normalizeMainDimensions(baseMesh.vertices.map(deformVertex));
   const normalizedAudit = location.hostname === "127.0.0.1" || location.hostname === "localhost" ? auditMeshGeometry(vertices) : null;
+  const beforeLocal = normalizedAudit ? vertices.map((vertex) => ({ ...vertex })) : null;
   vertices = applyLocalCalibrations(vertices);
   return {
     vertices,
     faces: baseMesh.faces,
     previewFaces: baseMesh.previewFaces,
-    audit: normalizedAudit ? { normalized: normalizedAudit, final: auditMeshGeometry(vertices) } : null,
+    audit: normalizedAudit
+      ? { normalized: normalizedAudit, final: auditMeshGeometry(vertices), localDelta: deformationDeltaStats(beforeLocal, vertices) }
+      : null,
   };
 }
 
@@ -601,21 +604,32 @@ function synchronizeWeldedVertices(vertices) {
   });
 }
 
-function addConstraint(constraints, index, target) {
+function addConstraint(constraints, index, target, strength = 1) {
   const constraint = constraints.get(index) || { targets: [] };
-  constraint.targets.push(target);
+  constraint.targets.push({ target, strength });
   constraints.set(index, constraint);
 }
 
 function averagedConstraintTarget(constraint) {
+  const totalWeight = constraint.targets.reduce((sum, item) => sum + Math.max(item.strength, 0.001), 0) || 1;
   const target = constraint.targets.reduce(
-    (sum, value) => ({ x: sum.x + value.x, y: sum.y + value.y, z: sum.z + value.z }),
+    (sum, item) => {
+      const weight = Math.max(item.strength, 0.001);
+      return {
+        x: sum.x + item.target.x * weight,
+        y: sum.y + item.target.y * weight,
+        z: sum.z + item.target.z * weight,
+      };
+    },
     { x: 0, y: 0, z: 0 },
   );
-  target.x /= constraint.targets.length;
-  target.y /= constraint.targets.length;
-  target.z /= constraint.targets.length;
-  return target;
+  target.x /= totalWeight;
+  target.y /= totalWeight;
+  target.z /= totalWeight;
+  return {
+    target,
+    strength: Math.max(...constraint.targets.map((item) => item.strength)),
+  };
 }
 
 function collectActiveWeights(names) {
@@ -626,6 +640,28 @@ function collectActiveWeights(names) {
     });
   });
   return active;
+}
+
+function expandActiveWeights(activeWeights, rings = 2, falloff = 0.72) {
+  const expanded = new Map(activeWeights);
+  let frontier = [...activeWeights.entries()];
+  for (let ring = 0; ring < rings; ring += 1) {
+    const next = new Map();
+    frontier.forEach(([index, weight]) => {
+      baseMesh.adjacency[index].forEach((neighbor) => {
+        const nextWeight = weight * falloff;
+        if (nextWeight <= 0.05) return;
+        const current = expanded.get(neighbor) || 0;
+        if (nextWeight > current) {
+          expanded.set(neighbor, nextWeight);
+          next.set(neighbor, nextWeight);
+        }
+      });
+    });
+    frontier = [...next.entries()];
+    if (!frontier.length) break;
+  }
+  return expanded;
 }
 
 function earTranslation(vertices) {
@@ -649,49 +685,207 @@ function earTranslation(vertices) {
   };
 }
 
-function solveSmoothDisplacement(vertices, constraints, activeWeights, iterations = 28) {
-  const displacements = vertices.map(() => ({ x: 0, y: 0, z: 0 }));
-  const fixed = new Uint8Array(vertices.length);
-  constraints.forEach((constraint, index) => {
-    const target = averagedConstraintTarget(constraint);
-    displacements[index] = {
-      x: target.x - vertices[index].x,
-      y: target.y - vertices[index].y,
-      z: target.z - vertices[index].z,
-    };
-    fixed[index] = 1;
+function subtractVector(a, b) {
+  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+}
+
+function addVector(a, b) {
+  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+}
+
+function scaleVector(v, factor) {
+  return { x: v.x * factor, y: v.y * factor, z: v.z * factor };
+}
+
+function multiplyMatrixVector(m, v) {
+  return {
+    x: m[0] * v.x + m[1] * v.y + m[2] * v.z,
+    y: m[3] * v.x + m[4] * v.y + m[5] * v.z,
+    z: m[6] * v.x + m[7] * v.y + m[8] * v.z,
+  };
+}
+
+function identityMatrix3() {
+  return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+}
+
+function transposeMatrix3(m) {
+  return [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]];
+}
+
+function multiplyMatrix3(a, b) {
+  return [
+    a[0] * b[0] + a[1] * b[3] + a[2] * b[6],
+    a[0] * b[1] + a[1] * b[4] + a[2] * b[7],
+    a[0] * b[2] + a[1] * b[5] + a[2] * b[8],
+    a[3] * b[0] + a[4] * b[3] + a[5] * b[6],
+    a[3] * b[1] + a[4] * b[4] + a[5] * b[7],
+    a[3] * b[2] + a[4] * b[5] + a[5] * b[8],
+    a[6] * b[0] + a[7] * b[3] + a[8] * b[6],
+    a[6] * b[1] + a[7] * b[4] + a[8] * b[7],
+    a[6] * b[2] + a[7] * b[5] + a[8] * b[8],
+  ];
+}
+
+function invertMatrix3(m) {
+  const det =
+    m[0] * (m[4] * m[8] - m[5] * m[7]) -
+    m[1] * (m[3] * m[8] - m[5] * m[6]) +
+    m[2] * (m[3] * m[7] - m[4] * m[6]);
+  if (Math.abs(det) < 1e-9) return null;
+  const invDet = 1 / det;
+  return [
+    (m[4] * m[8] - m[5] * m[7]) * invDet,
+    (m[2] * m[7] - m[1] * m[8]) * invDet,
+    (m[1] * m[5] - m[2] * m[4]) * invDet,
+    (m[5] * m[6] - m[3] * m[8]) * invDet,
+    (m[0] * m[8] - m[2] * m[6]) * invDet,
+    (m[2] * m[3] - m[0] * m[5]) * invDet,
+    (m[3] * m[7] - m[4] * m[6]) * invDet,
+    (m[1] * m[6] - m[0] * m[7]) * invDet,
+    (m[0] * m[4] - m[1] * m[3]) * invDet,
+  ];
+}
+
+function orthonormalizeMatrix3(matrix) {
+  let rotation = matrix.slice();
+  for (let iteration = 0; iteration < 6; iteration += 1) {
+    const inverse = invertMatrix3(rotation);
+    if (!inverse) break;
+    const inverseTranspose = transposeMatrix3(inverse);
+    rotation = rotation.map((value, index) => (value + inverseTranspose[index]) * 0.5);
+  }
+
+  let x = { x: rotation[0], y: rotation[3], z: rotation[6] };
+  let y = { x: rotation[1], y: rotation[4], z: rotation[7] };
+  const xLen = Math.hypot(x.x, x.y, x.z) || 1;
+  x = scaleVector(x, 1 / xLen);
+  const dotXY = x.x * y.x + x.y * y.y + x.z * y.z;
+  y = subtractVector(y, scaleVector(x, dotXY));
+  const yLen = Math.hypot(y.x, y.y, y.z) || 1;
+  y = scaleVector(y, 1 / yLen);
+  const z = {
+    x: x.y * y.z - x.z * y.y,
+    y: x.z * y.x - x.x * y.z,
+    z: x.x * y.y - x.y * y.x,
+  };
+  return [x.x, y.x, z.x, x.y, y.y, z.y, x.z, y.z, z.z];
+}
+
+function covarianceToRotation(covariance) {
+  const basis = [
+    covariance.xx,
+    covariance.xy,
+    covariance.xz,
+    covariance.yx,
+    covariance.yy,
+    covariance.yz,
+    covariance.zx,
+    covariance.zy,
+    covariance.zz,
+  ];
+  const rotation = orthonormalizeMatrix3(basis);
+  const det =
+    rotation[0] * (rotation[4] * rotation[8] - rotation[5] * rotation[7]) -
+    rotation[1] * (rotation[3] * rotation[8] - rotation[5] * rotation[6]) +
+    rotation[2] * (rotation[3] * rotation[7] - rotation[4] * rotation[6]);
+  if (det >= 0) return rotation;
+  return [rotation[0], rotation[1], -rotation[2], rotation[3], rotation[4], -rotation[5], rotation[6], rotation[7], -rotation[8]];
+}
+
+function buildArapRotations(restVertices, currentVertices, activeIndexes) {
+  const rotations = new Map();
+  activeIndexes.forEach((index) => {
+    const neighbors = baseMesh.adjacency[index];
+    if (!neighbors.length) {
+      rotations.set(index, identityMatrix3());
+      return;
+    }
+    const covariance = { xx: 0, xy: 0, xz: 0, yx: 0, yy: 0, yz: 0, zx: 0, zy: 0, zz: 0 };
+    const restOrigin = restVertices[index];
+    const currentOrigin = currentVertices[index];
+    neighbors.forEach((neighbor) => {
+      const p = subtractVector(restVertices[neighbor], restOrigin);
+      const q = subtractVector(currentVertices[neighbor], currentOrigin);
+      covariance.xx += q.x * p.x;
+      covariance.xy += q.x * p.y;
+      covariance.xz += q.x * p.z;
+      covariance.yx += q.y * p.x;
+      covariance.yy += q.y * p.y;
+      covariance.yz += q.y * p.z;
+      covariance.zx += q.z * p.x;
+      covariance.zy += q.z * p.y;
+      covariance.zz += q.z * p.z;
+    });
+    rotations.set(index, covarianceToRotation(covariance));
   });
+  return rotations;
+}
+
+function solveSmoothDisplacement(vertices, constraints, activeWeights, iterations = 24, restVerticesOverride = null) {
   const activeIndexes = [...activeWeights.keys()];
+  if (!activeIndexes.length) return;
+  const restVertices = restVerticesOverride || vertices.map((vertex) => ({ ...vertex }));
+  const fixed = new Uint8Array(vertices.length);
+  const constraintTargets = new Map();
+  constraints.forEach((constraint, index) => {
+    const averaged = averagedConstraintTarget(constraint);
+    fixed[index] = averaged.strength >= 0.95 ? 1 : 0;
+    constraintTargets.set(index, averaged);
+  });
+  constraintTargets.forEach(({ target, strength }, index) => {
+    const amount = fixed[index] ? 1 : Math.min(strength, 0.65);
+    vertices[index] = {
+      x: vertices[index].x + (target.x - vertices[index].x) * amount,
+      y: vertices[index].y + (target.y - vertices[index].y) * amount,
+      z: vertices[index].z + (target.z - vertices[index].z) * amount,
+    };
+  });
+
   for (let iteration = 0; iteration < iterations; iteration += 1) {
-    const next = displacements.map((value) => ({ ...value }));
+    const rotations = buildArapRotations(restVertices, vertices, activeIndexes);
+    const next = vertices.map((vertex) => ({ ...vertex }));
+
     activeIndexes.forEach((index) => {
-      if (fixed[index]) return;
+      if (fixed[index]) {
+        next[index] = { ...constraintTargets.get(index).target };
+        return;
+      }
       const neighbors = baseMesh.adjacency[index];
       if (!neighbors.length) return;
-      const average = neighbors.reduce(
-        (sum, neighbor) => ({
-          x: sum.x + displacements[neighbor].x,
-          y: sum.y + displacements[neighbor].y,
-          z: sum.z + displacements[neighbor].z,
-        }),
-        { x: 0, y: 0, z: 0 },
-      );
+
+      let rhs = { x: 0, y: 0, z: 0 };
+      const rotationI = rotations.get(index) || identityMatrix3();
+      neighbors.forEach((neighbor) => {
+        const rotationJ = rotations.get(neighbor) || rotationI;
+        const restEdge = subtractVector(restVertices[index], restVertices[neighbor]);
+        const rotated = scaleVector(addVector(multiplyMatrixVector(rotationI, restEdge), multiplyMatrixVector(rotationJ, restEdge)), 0.5);
+        rhs = addVector(rhs, addVector(vertices[neighbor], rotated));
+      });
+
       const envelope = activeWeights.get(index) || 0;
+      const constraint = constraintTargets.get(index);
+      if (constraint) {
+        const targetWeight = constraint.strength * 7;
+        rhs = addVector(rhs, scaleVector(constraint.target, targetWeight));
+      }
+      const anchorWeight = 0.18 + (1 - envelope) * 0.82;
+      rhs = addVector(rhs, scaleVector(restVertices[index], anchorWeight));
+      const constraintWeight = constraint ? constraint.strength * 7 : 0;
+      const solved = scaleVector(rhs, 1 / (baseMesh.adjacency[index].length + anchorWeight + constraintWeight));
       next[index] = {
-        x: (average.x / neighbors.length) * envelope,
-        y: (average.y / neighbors.length) * envelope,
-        z: (average.z / neighbors.length) * envelope,
+        x: restVertices[index].x + (solved.x - restVertices[index].x) * envelope,
+        y: restVertices[index].y + (solved.y - restVertices[index].y) * envelope,
+        z: restVertices[index].z + (solved.z - restVertices[index].z) * envelope,
       };
     });
-    for (let index = 0; index < displacements.length; index += 1) displacements[index] = next[index];
+
+    constraintTargets.forEach(({ target }, index) => {
+      if (fixed[index]) next[index] = { ...target };
+    });
+    for (let index = 0; index < vertices.length; index += 1) vertices[index] = next[index];
+    synchronizeWeldedVertices(vertices);
   }
-  activeIndexes.forEach((index) => {
-    vertices[index] = {
-      x: vertices[index].x + displacements[index].x,
-      y: vertices[index].y + displacements[index].y,
-      z: vertices[index].z + displacements[index].z,
-    };
-  });
 }
 
 function countOrientationChanges(reference, candidate) {
@@ -757,8 +951,12 @@ function applyLocalCalibrations(vertices) {
 
   synchronizeWeldedVertices(calibrated);
   const lockNames = ["leftEyeSocket", "rightEyeSocket", "nose", "leftBrow", "rightBrow", "leftEar", "rightEar"];
+  const arapNames = [...lockNames, "leftCheek", "rightCheek", "leftEarRoot", "rightEarRoot", "noseRoot"];
   const constraints = new Map();
   const earTargets = new Map();
+  cheekInfluences.forEach((weight, index) => {
+    if (weight > 0.12) addConstraint(constraints, index, calibrated[index], Math.min(0.72, weight * 0.62));
+  });
   lockNames.forEach((name) => {
     getRegionShapeTargets(calibrated, name).forEach(({ index, target }) => {
       if (name === "leftEar" || name === "rightEar") earTargets.set(index, target);
@@ -773,7 +971,8 @@ function applyLocalCalibrations(vertices) {
   earTargets.forEach((target, index) => {
     addConstraint(constraints, index, { x: target.x + delta.x, y: target.y + delta.y, z: target.z + delta.z });
   });
-  solveSmoothDisplacement(calibrated, constraints, collectActiveWeights(lockNames));
+  const activeWeights = expandActiveWeights(collectActiveWeights(arapNames), 5, 0.82);
+  solveSmoothDisplacement(calibrated, constraints, activeWeights, 26, source);
   synchronizeWeldedVertices(calibrated);
   const safe = limitLocalDeformation(source, calibrated);
   synchronizeWeldedVertices(safe);
@@ -891,6 +1090,24 @@ function auditMeshGeometry(vertices) {
     if (baseNormal.x * currentNormal.x + baseNormal.y * currentNormal.y + baseNormal.z * currentNormal.z < 0) flippedFaces += 1;
   });
   return { maxSeamGap, flippedFaces, degenerateFaces };
+}
+
+function deformationDeltaStats(source, candidate) {
+  let max = 0;
+  let sum = 0;
+  let moved = 0;
+  source.forEach((vertex, index) => {
+    const next = candidate[index];
+    const distance = Math.hypot(next.x - vertex.x, next.y - vertex.y, next.z - vertex.z);
+    max = Math.max(max, distance);
+    sum += distance;
+    if (distance > 0.05) moved += 1;
+  });
+  return {
+    max: Number(max.toFixed(4)),
+    mean: Number((sum / Math.max(source.length, 1)).toFixed(4)),
+    moved,
+  };
 }
 
 function drawMesh() {
